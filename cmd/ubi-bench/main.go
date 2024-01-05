@@ -73,11 +73,12 @@ type Commit2In struct {
 }
 
 type Commit1In struct {
-	Sid    storiface.SectorRef
-	Ticket abi.SealRandomness
-	Piece  []abi.PieceInfo `json:"piece,omitempty"`
-	Cids   storiface.SectorCids
-	Seed   lapi.SealSeed
+	Sid        storiface.SectorRef
+	Ticket     abi.SealRandomness
+	Piece      []abi.PieceInfo `json:"piece,omitempty"`
+	Cids       storiface.SectorCids
+	Seed       lapi.SealSeed
+	SectorSize abi.SectorSize `json:"sector_size,omitempty"`
 }
 
 func main() {
@@ -91,9 +92,9 @@ func main() {
 		Version:                   "v0.0.1",
 		DisableSliceFlagSeparator: true,
 		Commands: []*cli.Command{
-			sealBenchCmd,
+			sealCmd,
 			c1Cmd,
-			proveCmd,
+			c2Cmd,
 			verifyCmd,
 		},
 	}
@@ -104,7 +105,7 @@ func main() {
 	}
 }
 
-var sealBenchCmd = &cli.Command{
+var sealCmd = &cli.Command{
 	Name:  "sealing",
 	Usage: "Benchmark seal",
 	Flags: []cli.Flag{
@@ -362,6 +363,7 @@ func runSeals(sb *ffiwrapper.Sealer, numSectors int, par ParCfg, mid abi.ActorID
 					c1in.Piece = piece
 					c1in.Cids = cids
 					c1in.Seed = seed
+					c1in.SectorSize = sectorSize
 					bytes, err := json.Marshal(c1in)
 					if err != nil {
 						return err
@@ -400,25 +402,15 @@ var c1Cmd = &cli.Command{
 	Usage:     "execute Commit1 task",
 	ArgsUsage: "[input.json]",
 	Flags: []cli.Flag{
-		&cli.BoolFlag{
-			Name:  "no-gpu",
-			Usage: "disable gpu usage for the benchmark run",
-		},
 		&cli.StringFlag{
 			Name:  "storage-dir",
 			Usage: "path to the storage directory that will store sectors long term",
 		},
 	},
 	Action: func(c *cli.Context) error {
-		if c.Bool("no-gpu") {
-			err := os.Setenv("BELLMAN_NO_GPU", "1")
-			if err != nil {
-				return xerrors.Errorf("setting no-gpu flag: %w", err)
-			}
-		}
 
 		if !c.Args().Present() {
-			return xerrors.Errorf("Usage: ubi-bench prove [input.json]")
+			return xerrors.Errorf("Usage: ubi-bench c1 [input.json]")
 		}
 
 		sdir := c.String("storage-dir")
@@ -449,11 +441,6 @@ var c1Cmd = &cli.Command{
 			Value: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 255},
 		}
 
-		sectorSizeInt, err := units.RAMInBytes("512MiB")
-		if err != nil {
-			return err
-		}
-
 		c1o, err := sb.SealCommit1(context.TODO(), c1in.Sid, c1in.Ticket, seed.Value, c1in.Piece, c1in.Cids)
 		if err != nil {
 			return err
@@ -462,7 +449,7 @@ var c1Cmd = &cli.Command{
 		var c2in = new(Commit2In)
 		c2in.SectorNum = int64(c1in.Sid.ID.Number)
 		c2in.Phase1Out = c1o
-		c2in.SectorSize = uint64(sectorSizeInt)
+		c2in.SectorSize = uint64(c1in.SectorSize)
 		c2in.Cids = c1in.Cids
 		c2in.Sid = c1in.Sid
 		c2in.Ticket = c1in.Ticket
@@ -483,9 +470,9 @@ var c1Cmd = &cli.Command{
 	},
 }
 
-var proveCmd = &cli.Command{
-	Name:      "prove",
-	Usage:     "Benchmark a proof computation",
+var c2Cmd = &cli.Command{
+	Name:      "c2",
+	Usage:     "execute c2 task for a proof computation",
 	ArgsUsage: "[input.json]",
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
@@ -568,20 +555,7 @@ var verifyCmd = &cli.Command{
 	Name:      "verify",
 	Usage:     "Verify a proof computation",
 	ArgsUsage: "[input.json]",
-	Flags: []cli.Flag{
-		&cli.BoolFlag{
-			Name:  "no-gpu",
-			Usage: "disable gpu usage for the benchmark run",
-		},
-	},
 	Action: func(c *cli.Context) error {
-		if c.Bool("no-gpu") {
-			err := os.Setenv("BELLMAN_NO_GPU", "1")
-			if err != nil {
-				return xerrors.Errorf("setting no-gpu flag: %w", err)
-			}
-		}
-
 		if !c.Args().Present() {
 			return xerrors.Errorf("Usage: ubi verify [input.json]")
 		}
