@@ -685,7 +685,7 @@ var batchC1Cmd = &cli.Command{
 				return err
 			}
 
-			taskDir := filepath.Join(sdir, fmt.Sprintf("%d-%d-%d-%d", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Sid.ProofType, c2in.Seed.Epoch))
+			taskDir := filepath.Join(filepath.Dir(sdir), fmt.Sprintf("%d-%d-%d-%d", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Sid.ProofType, c2in.Seed.Epoch))
 			err = os.MkdirAll(taskDir, 0775) //nolint:gosec
 			if err != nil {
 				return xerrors.Errorf("creating task dir: %w", err)
