@@ -16,7 +16,10 @@ import (
 	"github.com/filecoin-project/lotus/chain/types"
 	cliutil "github.com/filecoin-project/lotus/cli/util"
 	logging "github.com/ipfs/go-log/v2"
+	"github.com/valyala/gozstd"
 	"golang.org/x/xerrors"
+	"io"
+	"os"
 	"time"
 )
 
@@ -86,14 +89,7 @@ func GetRandomness(minerId address.Address, tag crypto.DomainSeparationTag, heig
 }
 
 func generateBeaconEntry(epoch abi.ChainEpoch) ([]types.BeaconEntry, error) {
-
 	bSchedule := beacon.Schedule{{Start: 0, Beacon: beacon.NewMockBeacon(time.Second)}}
-
-	//todayTs := uint64(1652222222)
-	//beacon, err := drand.NewDrandBeacon(todayTs, build.BlockDelaySecs, nil, build.DrandConfigs[build.DrandDevnet])
-	//if err != nil {
-	//	return nil, xerrors.Errorf("creating drand beacon: %w", err)
-	//}
 	randomBeacon := bSchedule.BeaconForEpoch(epoch)
 
 	start := build.Clock.Now()
@@ -123,4 +119,27 @@ func reverse(arr []types.BeaconEntry) {
 	for i := 0; i < len(arr)/2; i++ {
 		arr[i], arr[len(arr)-(1+i)] = arr[len(arr)-(1+i)], arr[i]
 	}
+}
+
+func CompressDataToFile(fileName string, in []byte) error {
+	f, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	result := gozstd.Compress(nil, in)
+	_, err = io.Copy(f, bytes.NewBuffer(result))
+	return err
+}
+
+func DecompressFileToData(fileName string) ([]byte, error) {
+	_, err := os.Stat(fileName)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(fileName)
+	if err != nil {
+		return nil, err
+	}
+	return gozstd.Decompress(nil, data)
 }
