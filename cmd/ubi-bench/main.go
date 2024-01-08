@@ -664,7 +664,7 @@ var batchC1Cmd = &cli.Command{
 			}
 
 			seed := lapi.SealSeed{
-				Epoch: abi.ChainEpoch(height),
+				Epoch: abi.ChainEpoch(height + int64(i)),
 				Value: randomness,
 			}
 
