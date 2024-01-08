@@ -7,9 +7,11 @@ import (
 	"github.com/docker/go-units"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-paramfetch"
+	"github.com/filecoin-project/go-state-types/crypto"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/mitchellh/go-homedir"
+	"github.com/swanchain/ubi-benchmark/utils"
 	"golang.org/x/crypto/blake2b"
 	"math/big"
 	"math/rand"
@@ -77,7 +79,7 @@ type Commit1In struct {
 	Ticket     abi.SealRandomness
 	Piece      []abi.PieceInfo `json:"piece,omitempty"`
 	Cids       storiface.SectorCids
-	Seed       lapi.SealSeed
+	Seed       lapi.SealSeed  `json:"seed,omitempty"`
 	SectorSize abi.SectorSize `json:"sector_size,omitempty"`
 }
 
@@ -93,6 +95,7 @@ func main() {
 		DisableSliceFlagSeparator: true,
 		Commands: []*cli.Command{
 			sealCmd,
+			seedCmd,
 			c1Cmd,
 			c2Cmd,
 			verifyCmd,
@@ -350,11 +353,6 @@ func runSeals(sb *ffiwrapper.Sealer, numSectors int, par ParCfg, mid abi.ActorID
 						SectorKey:    nil,
 					}
 
-					seed := lapi.SealSeed{
-						Epoch: 101,
-						Value: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 255},
-					}
-
 					log.Infof("[%d] Generating Commit1 for sector:", i)
 
 					var c1in = new(Commit1In)
@@ -362,14 +360,13 @@ func runSeals(sb *ffiwrapper.Sealer, numSectors int, par ParCfg, mid abi.ActorID
 					c1in.Ticket = ticket
 					c1in.Piece = piece
 					c1in.Cids = cids
-					c1in.Seed = seed
 					c1in.SectorSize = sectorSize
 					bytes, err := json.Marshal(c1in)
 					if err != nil {
 						return err
 					}
 
-					fileName := filepath.Join(filepath.Dir(sbdir), fmt.Sprintf("c1-%d-%d.json", mid, i.String()))
+					fileName := filepath.Join(filepath.Dir(sbdir), fmt.Sprintf("c1-%d-%s.json", mid, i.String()))
 					if err = os.WriteFile(fileName, bytes, 0644); err != nil {
 						return err
 					}
@@ -397,6 +394,40 @@ func runSeals(sb *ffiwrapper.Sealer, numSectors int, par ParCfg, mid abi.ActorID
 	return sealTimings, sealedSectors, nil
 }
 
+var seedCmd = &cli.Command{
+	Name:  "seed",
+	Usage: "Generate random numbers",
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "miner-addr",
+			Usage: "miner address",
+			Value: "t01000",
+		},
+		&cli.Int64Flag{
+			Name:  "height",
+			Usage: "specify a height",
+		},
+	},
+	Action: func(c *cli.Context) error {
+		height := c.Int64("height")
+		if height == 0 {
+			return fmt.Errorf("must be specify a height")
+		}
+
+		maddr, err := address.NewFromString(c.String("miner-addr"))
+		if err != nil {
+			return err
+		}
+
+		randomness, err := utils.GetRandomness(maddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("randomness: %+v", randomness)
+		return nil
+	},
+}
+
 var c1Cmd = &cli.Command{
 	Name:      "c1",
 	Usage:     "execute Commit1 task",
@@ -406,11 +437,20 @@ var c1Cmd = &cli.Command{
 			Name:  "storage-dir",
 			Usage: "path to the storage directory that will store sectors long term",
 		},
+		&cli.Int64Flag{
+			Name:  "height",
+			Usage: "specify a height",
+		},
 	},
 	Action: func(c *cli.Context) error {
 
 		if !c.Args().Present() {
 			return xerrors.Errorf("Usage: ubi-bench c1 [input.json]")
+		}
+
+		height := c.Int64("height")
+		if height == 0 {
+			return fmt.Errorf("must be specify a height")
 		}
 
 		sdir := c.String("storage-dir")
@@ -420,7 +460,6 @@ var c1Cmd = &cli.Command{
 		sbfs := &basicfs.Provider{
 			Root: sdir,
 		}
-
 		sb, err := ffiwrapper.New(sbfs)
 		if err != nil {
 			return err
@@ -430,15 +469,24 @@ var c1Cmd = &cli.Command{
 		if err != nil {
 			return xerrors.Errorf("reading input file: %w", err)
 		}
-
 		var c1in Commit1In
 		if err := json.Unmarshal(inb, &c1in); err != nil {
 			return xerrors.Errorf("unmarshalling input file: %w", err)
 		}
 
+		maddr, err := address.NewFromString("t0" + c1in.Sid.ID.Miner.String())
+		if err != nil {
+			return err
+		}
+
+		randomness, err := utils.GetRandomness(maddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height)
+		if err != nil {
+			return err
+		}
+
 		seed := lapi.SealSeed{
-			Epoch: 101,
-			Value: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 255},
+			Epoch: abi.ChainEpoch(height),
+			Value: randomness,
 		}
 
 		c1o, err := sb.SealCommit1(context.TODO(), c1in.Sid, c1in.Ticket, seed.Value, c1in.Piece, c1in.Cids)
@@ -453,7 +501,7 @@ var c1Cmd = &cli.Command{
 		c2in.Cids = c1in.Cids
 		c2in.Sid = c1in.Sid
 		c2in.Ticket = c1in.Ticket
-		c2in.Seed = c1in.Seed
+		c2in.Seed = seed
 
 		c2inBytes, err := json.Marshal(c2in)
 		if err != nil {
