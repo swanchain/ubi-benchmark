@@ -113,8 +113,9 @@ func main() {
 }
 
 var sealCmd = &cli.Command{
-	Name:  "sealing",
-	Usage: "Benchmark seal",
+	Name:   "sealing",
+	Usage:  "Benchmark seal",
+	Hidden: true,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "storage-dir",
@@ -399,8 +400,9 @@ func runSeals(sb *ffiwrapper.Sealer, numSectors int, par ParCfg, mid abi.ActorID
 }
 
 var seedCmd = &cli.Command{
-	Name:  "seed",
-	Usage: "Generate random numbers",
+	Name:   "seed",
+	Usage:  "Generate random numbers",
+	Hidden: true,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "miner-addr",
@@ -436,6 +438,7 @@ var c1Cmd = &cli.Command{
 	Name:      "c1",
 	Usage:     "execute Commit1 task",
 	ArgsUsage: "[input.json]",
+	Hidden:    true,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "storage-dir",
@@ -605,6 +608,7 @@ var batchC1Cmd = &cli.Command{
 	Name:      "batch",
 	Usage:     "execute batch Commit1 task",
 	ArgsUsage: "[input.json]",
+	Hidden:    true,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "storage-dir",
@@ -713,8 +717,9 @@ var batchC1Cmd = &cli.Command{
 }
 
 var uploadC1Cmd = &cli.Command{
-	Name:  "upload",
-	Usage: "Batch upload the results of c1 to mcs",
+	Name:   "upload",
+	Usage:  "Batch upload the results of c1 to mcs",
+	Hidden: true,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "c1-dir",
