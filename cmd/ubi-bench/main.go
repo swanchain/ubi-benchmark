@@ -545,8 +545,15 @@ var c2Cmd = &cli.Command{
 				return xerrors.Errorf("setting no-gpu flag: %w", err)
 			}
 		}
-		if !c.Args().Present() {
-			return xerrors.Errorf("Usage: ubi prove [input.json]")
+
+		paramsFile := c.Args().First()
+		inParamPath, ok := os.LookupEnv("UBI_TASK_IN_PARAM_PATH")
+		if ok {
+			paramsFile = inParamPath
+		}
+
+		if strings.TrimSpace(paramsFile) == "" {
+			return xerrors.Errorf("input param is empty")
 		}
 
 		sdir := c.String("storage-dir")
@@ -554,7 +561,7 @@ var c2Cmd = &cli.Command{
 			return err
 		}
 
-		inb, err := os.ReadFile(c.Args().First())
+		inb, err := os.ReadFile(paramsFile)
 		if err != nil {
 			return xerrors.Errorf("reading input file: %w", err)
 		}
@@ -626,7 +633,7 @@ var batchC1Cmd = &cli.Command{
 	},
 	Action: func(c *cli.Context) error {
 		if !c.Args().Present() {
-			return xerrors.Errorf("Usage: ubi-bench c1 [input.json]")
+			return xerrors.Errorf("Usage: ubi-bench batch [input.json]")
 		}
 		num := c.Int("num")
 
