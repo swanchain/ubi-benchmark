@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,12 +11,14 @@ import (
 	"github.com/filecoin-project/go-state-types/crypto"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	"github.com/filecoin-project/lotus/chain/types"
+	"github.com/filswan/go-mcs-sdk/mcs/api/common/logs"
 	"github.com/mitchellh/go-homedir"
 	"github.com/swanchain/ubi-benchmark/utils"
 	"golang.org/x/crypto/blake2b"
 	"io/fs"
 	"math/big"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -536,7 +539,7 @@ var c2Cmd = &cli.Command{
 		&cli.StringFlag{
 			Name:  "storage-dir",
 			Usage: "path to the storage directory that will store sectors long term",
-			Value: "/var",
+			Value: "/var/tmp",
 		},
 	},
 	Action: func(c *cli.Context) error {
@@ -567,8 +570,6 @@ var c2Cmd = &cli.Command{
 			return xerrors.Errorf("reading input file: %w", err)
 		}
 
-		fmt.Printf("c2 input: %s", string(inb))
-
 		var c2in Commit2In
 		if err := json.Unmarshal(inb, &c2in); err != nil {
 			return xerrors.Errorf("unmarshalling input file: %w", err)
@@ -589,24 +590,59 @@ var c2Cmd = &cli.Command{
 			return err
 		}
 		totalTime := time.Since(start)
-		svi := prooftypes.SealVerifyInfo{
-			SectorID:              c2in.Sid.ID,
-			SealedCID:             c2in.Cids.Sealed,
-			SealProof:             c2in.Sid.ProofType,
-			Proof:                 proof,
-			DealIDs:               nil,
-			Randomness:            c2in.Ticket,
-			InteractiveRandomness: c2in.Seed.Value,
-			UnsealedCID:           c2in.Cids.Unsealed,
+		//svi := prooftypes.SealVerifyInfo{
+		//	SectorID:              c2in.Sid.ID,
+		//	SealedCID:             c2in.Cids.Sealed,
+		//	SealProof:             c2in.Sid.ProofType,
+		//	Proof:                 proof,
+		//	DealIDs:               nil,
+		//	Randomness:            c2in.Ticket,
+		//	InteractiveRandomness: c2in.Seed.Value,
+		//	UnsealedCID:           c2in.Cids.Unsealed,
+		//}
+		//c2OutBytes, err := json.Marshal(svi)
+		//if err != nil {
+		//	return err
+		//}
+		//
+		//c2JsonFile := filepath.Join(filepath.Dir(sdir), fmt.Sprintf("c2-%d-%d-%d.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Seed.Epoch))
+		//if err = os.WriteFile(c2JsonFile, c2OutBytes, 0666); err != nil {
+		//	return err
+		//}
+
+		reqParam := map[string]interface{}{
+			"cp_address": os.Getenv("WALLET"),
+			"node_id":    os.Getenv("NODE_ID"),
+			"task_id":    os.Getenv("TASKID"),
+			"task_uuid":  os.Getenv("TASK_UUID"),
+			"task_type":  os.Getenv("TASK_TYPE"),
+			"proof":      string(proof),
 		}
-		c2OutBytes, err := json.Marshal(svi)
+
+		payload, err := json.Marshal(reqParam)
 		if err != nil {
+			logs.GetLogger().Errorf("Failed convert to json, error: %+v", err)
 			return err
 		}
 
-		c2JsonFile := filepath.Join(filepath.Dir(sdir), fmt.Sprintf("c2-%d-%d-%d.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Seed.Epoch))
-		if err = os.WriteFile(c2JsonFile, c2OutBytes, 0666); err != nil {
+		client := &http.Client{}
+		receiveUrl := os.Getenv("RECEIVE_PROOF_URL")
+		req, err := http.NewRequest("POST", receiveUrl, bytes.NewBuffer(payload))
+		if err != nil {
+			logs.GetLogger().Errorf("Error creating request: %v", err)
 			return err
+		}
+		req.Header.Add("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			logs.GetLogger().Errorf("Failed send a request, error: %+v", err)
+			return err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("")
 		}
 
 		fmt.Printf("seal: commit phase 2 finished, total time: %f, sector_id: %d \n", totalTime.Seconds(), c2in.SectorNum)
