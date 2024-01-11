@@ -536,6 +536,7 @@ var c2Cmd = &cli.Command{
 		&cli.StringFlag{
 			Name:  "storage-dir",
 			Usage: "path to the storage directory that will store sectors long term",
+			Value: "/var",
 		},
 	},
 	Action: func(c *cli.Context) error {
@@ -549,7 +550,7 @@ var c2Cmd = &cli.Command{
 		paramsFile := c.Args().First()
 		inParamPath, ok := os.LookupEnv("UBI_TASK_IN_PARAM_PATH")
 		if ok {
-			paramsFile = inParamPath
+			paramsFile = filepath.Join(inParamPath, "input.json")
 		}
 
 		if strings.TrimSpace(paramsFile) == "" {
@@ -565,6 +566,8 @@ var c2Cmd = &cli.Command{
 		if err != nil {
 			return xerrors.Errorf("reading input file: %w", err)
 		}
+
+		fmt.Printf("c2 input: %s", string(inb))
 
 		var c2in Commit2In
 		if err := json.Unmarshal(inb, &c2in); err != nil {

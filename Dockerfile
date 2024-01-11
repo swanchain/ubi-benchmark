@@ -61,15 +61,19 @@ RUN useradd -r -u 532 -U fc \
 FROM ubi-base AS ubi-benchmark
 
 COPY --from=ubi-builder /opt/ubi-benchmark/ubi-bench /usr/local/bin/
-
-ENV UBI_TASK_IN_PARAM_PATH /var/tmp/input.json
+ENV FFI_BUILD_FROM_SOURCE=1
+ENV TRUST_PARAMS=1
+ENV RUST_LOG=Info
+ENV UBI_TASK_IN_PARAM_PATH /var/tmp/fil-c2-param
 ENV FILECOIN_PARAMETER_CACHE /var/tmp/filecoin-proof-parameters
 
+RUN apt update && apt-get install -y coreutils vim
 RUN mkdir /var/tmp/filecoin-proof-parameters
 RUN chown fc: /var/tmp/filecoin-proof-parameters
+
 
 VOLUME /var/tmp/filecoin-proof-parameters
 
 USER fc
 
-CMD ["/bin/bash"]
+CMD ["/bin/bash", "-c", "sleep infinity"]
