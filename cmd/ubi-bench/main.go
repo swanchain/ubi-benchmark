@@ -16,6 +16,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/swanchain/ubi-benchmark/utils"
 	"golang.org/x/crypto/blake2b"
+	"io"
 	"io/fs"
 	"math/big"
 	"math/rand"
@@ -650,6 +651,8 @@ var c2Cmd = &cli.Command{
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			all, _ := io.ReadAll(resp.Body)
+			logs.GetLogger().Errorf("req: %s,  resp: %s", string(payload), string(all))
 			return fmt.Errorf("")
 		}
 
