@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/docker/go-units"
@@ -625,7 +626,14 @@ var c2Cmd = &cli.Command{
 			return err
 		}
 
-		client := &http.Client{}
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+
+		client := &http.Client{
+			Transport: transport,
+			Timeout:   20 * time.Second,
+		}
 		receiveUrl := os.Getenv("RECEIVE_PROOF_URL")
 		req, err := http.NewRequest("POST", receiveUrl, bytes.NewBuffer(payload))
 		if err != nil {
