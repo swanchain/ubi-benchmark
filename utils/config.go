@@ -14,11 +14,10 @@ type Config struct {
 }
 
 type MCS struct {
-	ApiKey        string
-	AccessToken   string
-	BucketName    string
-	Network       string
-	FileCachePath string
+	ApiKey     string
+	BucketName string
+	Network    string
+	HubUrl     string `toml:"HUB_URL"`
 }
 
 func InitConfig() error {

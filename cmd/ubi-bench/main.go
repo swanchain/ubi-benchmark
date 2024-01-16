@@ -613,12 +613,9 @@ var c2Cmd = &cli.Command{
 		//}
 
 		reqParam := map[string]interface{}{
-			"cp_address": os.Getenv("WALLET"),
-			"node_id":    os.Getenv("NODE_ID"),
-			"task_id":    os.Getenv("TASKID"),
-			"task_uuid":  os.Getenv("TASK_UUID"),
-			"task_type":  os.Getenv("TASK_TYPE"),
-			"proof":      string(proof),
+			"task_id":   os.Getenv("TASKID"),
+			"task_type": os.Getenv("TASK_TYPE"),
+			"proof":     string(proof),
 		}
 
 		payload, err := json.Marshal(reqParam)
@@ -793,6 +790,7 @@ var uploadC1Cmd = &cli.Command{
 			return err
 		}
 
+		var count int
 		storageService := utils.NewStorageService()
 		err := filepath.WalkDir(c1Dir, func(path string, d fs.DirEntry, err error) error {
 			split := strings.Split(d.Name(), "-")
@@ -803,6 +801,7 @@ var uploadC1Cmd = &cli.Command{
 				if err != nil {
 					return err
 				}
+				var inputParam, verifyParam string
 				for _, f := range files {
 					mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join("fil-c2", d.Name(), f.Name()), filepath.Join(path, f.Name()), true)
 					if err != nil {
@@ -817,7 +816,32 @@ var uploadC1Cmd = &cli.Command{
 
 					fileUrl := *gatewayUrl + "/ipfs/" + mcsOssFile.PayloadCid
 					fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
+					if strings.Contains(f.Name(), "verify") {
+						verifyParam = fileUrl
+					} else {
+						inputParam = fileUrl
+					}
 				}
+
+				var task Task
+				if count/2 == 0 {
+					task = Task{
+						Name:        d.Name(),
+						Type:        0,
+						ZkType:      "fil-c2-512M",
+						InputParam:  inputParam,
+						VerifyParam: verifyParam,
+						ResourceID:  CPU512,
+					}
+				} else {
+					task = Task{
+						Name:       d.Name(),
+						Type:       1,
+						ZkType:     "fil-c2-512M",
+						ResourceID: GPU512,
+					}
+				}
+				DoSend(task)
 				fmt.Println("======")
 			}
 			if err != nil {

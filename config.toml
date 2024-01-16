@@ -2,3 +2,5 @@
 ApiKey = "MCS_8dc183bb94c69c8c9b36c6e2"       # Acquired from "https://www.multichain.storage" -> setting -> Create API Key
 BucketName = "ubi-task-pool"                  # Acquired from "https://www.multichain.storage" -> bucket -> Add Bucket
 Network = "polygon.mainnet"                   # polygon.mainnet for mainnet, polygon.mumbai for testnet
+
+HUB_URL =" http://ubi-task.storefrontiers.cn/v1/tasks"
