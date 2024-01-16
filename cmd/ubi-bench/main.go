@@ -841,6 +841,8 @@ var uploadC1Cmd = &cli.Command{
 						ResourceID: GPU512,
 					}
 				}
+
+				count++
 				DoSend(task)
 				fmt.Println("======")
 			}
