@@ -835,10 +835,12 @@ var uploadC1Cmd = &cli.Command{
 					}
 				} else {
 					task = Task{
-						Name:       d.Name(),
-						Type:       1,
-						ZkType:     "fil-c2-512M",
-						ResourceID: GPU512,
+						Name:        d.Name(),
+						Type:        1,
+						ZkType:      "fil-c2-512M",
+						InputParam:  inputParam,
+						VerifyParam: verifyParam,
+						ResourceID:  GPU512,
 					}
 				}
 
