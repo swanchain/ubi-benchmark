@@ -613,9 +613,11 @@ var c2Cmd = &cli.Command{
 		//}
 
 		reqParam := map[string]interface{}{
-			"task_id":   os.Getenv("TASKID"),
-			"task_type": os.Getenv("TASK_TYPE"),
-			"proof":     string(proof),
+			"task_id":    os.Getenv("TASKID"),
+			"task_type":  os.Getenv("TASK_TYPE"),
+			"zk_type":    os.Getenv("ZK_TYPE"),
+			"name_space": os.Getenv("NAME_SPACE"),
+			"proof":      string(proof),
 		}
 
 		payload, err := json.Marshal(reqParam)
@@ -795,7 +797,6 @@ var uploadC1Cmd = &cli.Command{
 		err := filepath.WalkDir(c1Dir, func(path string, d fs.DirEntry, err error) error {
 			split := strings.Split(d.Name(), "-")
 			if d.IsDir() && len(split) == 4 {
-				fmt.Printf("directory: %s \n", d.Name())
 				storageService.CreateFolder("fil-c2", d.Name())
 				files, err := os.ReadDir(path)
 				if err != nil {
@@ -843,10 +844,9 @@ var uploadC1Cmd = &cli.Command{
 						ResourceID:  GPU512,
 					}
 				}
-
-				count++
 				DoSend(task)
-				fmt.Println("======")
+				count++
+				fmt.Println("==============")
 			}
 			if err != nil {
 				return err
