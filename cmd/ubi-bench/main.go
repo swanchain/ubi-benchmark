@@ -578,7 +578,7 @@ var c2Cmd = &cli.Command{
 
 		start := time.Now()
 		proof, err := sb.SealCommit2(context.TODO(), c2in.Sid, c2in.Phase1Out)
-		fmt.Printf("proof: %v", proof)
+		log.Info("proof: %v", proof)
 		if err != nil {
 			return err
 		}
@@ -597,13 +597,13 @@ var c2Cmd = &cli.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("c2OutBytes: %v", string(c2OutBytes))
+		log.Info("c2OutBytes: %v", string(c2OutBytes))
 		c2JsonFile := filepath.Join(filepath.Dir(sdir), fmt.Sprintf("c2-%d-%d-%d.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Seed.Epoch))
 		if err = os.WriteFile(c2JsonFile, c2OutBytes, 0666); err != nil {
 			return err
 		}
 
-		fmt.Printf("seal: commit phase 2 finished, total time: %f, sector_id: %d \n", totalTime.Seconds(), c2in.SectorNum)
+		log.Info("seal: commit phase 2 finished, total time: %f, sector_id: %d \n", totalTime.Seconds(), c2in.SectorNum)
 		return nil
 	},
 }
