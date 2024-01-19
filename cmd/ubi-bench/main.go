@@ -578,6 +578,7 @@ var c2Cmd = &cli.Command{
 
 		start := time.Now()
 		proof, err := sb.SealCommit2(context.TODO(), c2in.Sid, c2in.Phase1Out)
+		fmt.Printf("proof: %v", proof)
 		if err != nil {
 			return err
 		}
