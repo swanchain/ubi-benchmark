@@ -597,7 +597,7 @@ var c2Cmd = &cli.Command{
 		if err != nil {
 			return err
 		}
-
+		fmt.Printf("c2OutBytes: %v", c2OutBytes)
 		c2JsonFile := filepath.Join(filepath.Dir(sdir), fmt.Sprintf("c2-%d-%d-%d.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Seed.Epoch))
 		if err = os.WriteFile(c2JsonFile, c2OutBytes, 0666); err != nil {
 			return err
