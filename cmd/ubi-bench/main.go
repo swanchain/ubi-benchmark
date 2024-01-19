@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/docker/go-units"
@@ -592,32 +593,13 @@ var c2Cmd = &cli.Command{
 			return err
 		}
 		totalTime := time.Since(start)
-		//svi := prooftypes.SealVerifyInfo{
-		//	SectorID:              c2in.Sid.ID,
-		//	SealedCID:             c2in.Cids.Sealed,
-		//	SealProof:             c2in.Sid.ProofType,
-		//	Proof:                 proof,
-		//	DealIDs:               nil,
-		//	Randomness:            c2in.Ticket,
-		//	InteractiveRandomness: c2in.Seed.Value,
-		//	UnsealedCID:           c2in.Cids.Unsealed,
-		//}
-		//c2OutBytes, err := json.Marshal(svi)
-		//if err != nil {
-		//	return err
-		//}
-		//
-		//c2JsonFile := filepath.Join(filepath.Dir(sdir), fmt.Sprintf("c2-%d-%d-%d.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Seed.Epoch))
-		//if err = os.WriteFile(c2JsonFile, c2OutBytes, 0666); err != nil {
-		//	return err
-		//}
 
 		reqParam := map[string]interface{}{
 			"task_id":    os.Getenv("TASKID"),
 			"task_type":  os.Getenv("TASK_TYPE"),
 			"zk_type":    os.Getenv("ZK_TYPE"),
 			"name_space": os.Getenv("NAME_SPACE"),
-			"proof":      string(proof),
+			"proof":      base64.StdEncoding.EncodeToString(proof),
 		}
 
 		payload, err := json.Marshal(reqParam)
