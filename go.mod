@@ -232,3 +232,4 @@ require (
 )
 
 replace github.com/filecoin-project/filecoin-ffi => ./extern/filecoin-ffi
+replace github.com/filswan/go-mcs-sdk => ./extern/go-mcs-sdk
