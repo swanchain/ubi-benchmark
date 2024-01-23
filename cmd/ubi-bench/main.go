@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/docker/go-units"
 	"github.com/filecoin-project/go-address"
-	"github.com/filecoin-project/go-paramfetch"
 	"github.com/filecoin-project/go-state-types/crypto"
 	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	"github.com/filecoin-project/lotus/chain/types"
@@ -29,7 +28,6 @@ import (
 	prooftypes "github.com/filecoin-project/go-state-types/proof"
 	lapi "github.com/filecoin-project/lotus/api"
 	"github.com/filecoin-project/lotus/build"
-	lcli "github.com/filecoin-project/lotus/cli"
 	"github.com/filecoin-project/lotus/storage/sealer/ffiwrapper"
 	"github.com/filecoin-project/lotus/storage/sealer/ffiwrapper/basicfs"
 	"github.com/filecoin-project/lotus/storage/sealer/storiface"
@@ -567,9 +565,9 @@ var c2Cmd = &cli.Command{
 			return xerrors.Errorf("unmarshalling input file: %w", err)
 		}
 
-		if err := paramfetch.GetParams(lcli.ReqContext(c), build.ParametersJSON(), build.SrsJSON(), c2in.SectorSize); err != nil {
-			return xerrors.Errorf("getting params: %w", err)
-		}
+		//if err := paramfetch.GetParams(lcli.ReqContext(c), build.ParametersJSON(), build.SrsJSON(), c2in.SectorSize); err != nil {
+		//	return xerrors.Errorf("getting params: %w", err)
+		//}
 
 		sb, err := ffiwrapper.New(nil)
 		if err != nil {
