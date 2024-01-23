@@ -17,6 +17,7 @@ require (
 	github.com/filswan/go-mcs-sdk v0.0.4
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/urfave/cli/v2 v2.25.5
 	github.com/valyala/gozstd v1.20.1
 	golang.org/x/crypto v0.17.0
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2
@@ -200,7 +201,6 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
-	github.com/urfave/cli/v2 v2.25.5 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.0.1 // indirect
 	github.com/whyrusleeping/bencher v0.0.0-20190829221104-bb6607aa8bba // indirect
@@ -232,4 +232,5 @@ require (
 )
 
 replace github.com/filecoin-project/filecoin-ffi => ./extern/filecoin-ffi
+
 replace github.com/filswan/go-mcs-sdk => ./extern/go-mcs-sdk
