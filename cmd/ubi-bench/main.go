@@ -12,6 +12,7 @@ import (
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/mitchellh/go-homedir"
 	"github.com/swanchain/ubi-benchmark/utils"
+	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/blake2b"
 	"io/fs"
 	"math/big"
@@ -22,7 +23,6 @@ import (
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
-	"github.com/urfave/cli/v2"
 	"golang.org/x/xerrors"
 
 	"github.com/filecoin-project/go-state-types/abi"
@@ -729,6 +729,11 @@ var uploadC1Cmd = &cli.Command{
 			Name:  "c1-dir",
 			Usage: "path to the c1 out directory",
 		},
+		&cli.StringFlag{
+			Name:  "type",
+			Usage: "example: 512 or 32",
+			Value: "512",
+		},
 	},
 	Action: func(c *cli.Context) error {
 		c1Dir := c.String("c1-dir")
@@ -740,19 +745,29 @@ var uploadC1Cmd = &cli.Command{
 			return err
 		}
 
+		numType := c.String("type")
+		var dirName, zkType string
+		if numType == "512" {
+			dirName = "fil-c2/512M"
+			zkType = "fil-c2-512M"
+		} else if numType == "32" {
+			dirName = "fil-c2/32G"
+			zkType = "fil-c2-32G"
+		}
+
 		var count int
 		storageService := utils.NewStorageService()
 		err := filepath.WalkDir(c1Dir, func(path string, d fs.DirEntry, err error) error {
 			split := strings.Split(d.Name(), "-")
 			if d.IsDir() && len(split) == 4 {
-				storageService.CreateFolder("fil-c2", d.Name())
+				storageService.CreateFolder(dirName, d.Name())
 				files, err := os.ReadDir(path)
 				if err != nil {
 					return err
 				}
 				var inputParam, verifyParam string
 				for _, f := range files {
-					mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join("fil-c2", d.Name(), f.Name()), filepath.Join(path, f.Name()), true)
+					mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join(dirName, d.Name(), f.Name()), filepath.Join(path, f.Name()), true)
 					if err != nil {
 						log.Errorf("Failed upload file to bucket, error: %v", err)
 						return err
@@ -774,22 +789,36 @@ var uploadC1Cmd = &cli.Command{
 
 				var task Task
 				if count/2 == 0 {
+					var resourceId int
+					if numType == "512" {
+						resourceId = CPU512
+					} else if numType == "32" {
+						resourceId = CPU32G
+					}
+
 					task = Task{
 						Name:        d.Name(),
 						Type:        0,
-						ZkType:      "fil-c2-512M",
+						ZkType:      zkType,
 						InputParam:  inputParam,
 						VerifyParam: verifyParam,
-						ResourceID:  CPU512,
+						ResourceID:  resourceId,
 					}
 				} else {
+					var resourceId int
+					if numType == "512" {
+						resourceId = GPU512
+					} else if numType == "32" {
+						resourceId = GPU32G
+					}
+
 					task = Task{
 						Name:        d.Name(),
 						Type:        1,
-						ZkType:      "fil-c2-512M",
+						ZkType:      zkType,
 						InputParam:  inputParam,
 						VerifyParam: verifyParam,
-						ResourceID:  GPU512,
+						ResourceID:  resourceId,
 					}
 				}
 				DoSend(task)
