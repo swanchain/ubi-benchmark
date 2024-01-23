@@ -1,11 +1,11 @@
 package utils
 
 import (
+	"github.com/filswan/go-mcs-sdk/mcs/api/common/logs"
 	"strings"
 	"sync"
 
 	"github.com/filswan/go-mcs-sdk/mcs/api/bucket"
-	"github.com/filswan/go-mcs-sdk/mcs/api/common/logs"
 	"github.com/filswan/go-mcs-sdk/mcs/api/user"
 )
 
@@ -32,7 +32,7 @@ func NewStorageService() *StorageService {
 		mcsClient, err = user.LoginByApikeyV2(storage.McsApiKey, storage.NetWork)
 
 		if err != nil {
-			logs.GetLogger().Errorf("Failed creating mcsClient, error: %v", err)
+			log.Errorf("Failed creating mcsClient, error: %v", err)
 			return
 		}
 		storage.mcsClient = mcsClient
