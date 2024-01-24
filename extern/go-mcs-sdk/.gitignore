@@ -3,6 +3,5 @@ pkg/
 *.iml
 .env
 *.log
-logs
 
 
