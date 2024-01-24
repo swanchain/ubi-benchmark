@@ -4,6 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"math/big"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/docker/go-units"
 	"github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/go-paramfetch"
@@ -15,13 +23,6 @@ import (
 	"github.com/swanchain/ubi-benchmark/utils"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/blake2b"
-	"io/fs"
-	"math/big"
-	"math/rand"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
 	logging "github.com/ipfs/go-log/v2"
 	"golang.org/x/xerrors"
@@ -840,6 +841,13 @@ var verifyCmd = &cli.Command{
 	Name:      "verify",
 	Usage:     "Verify a proof computation",
 	ArgsUsage: "[input.json]",
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:    "string",
+			Aliases: []string{"s"},
+			Usage:   "input with string representation",
+		},
+	},
 	//Flags: []cli.Flag{
 	//	&cli.Int64Flag{
 	//		Name:  "height",
@@ -847,7 +855,7 @@ var verifyCmd = &cli.Command{
 	//	},
 	//},
 	Action: func(c *cli.Context) error {
-		if !c.Args().Present() {
+		if !c.Args().Present() && !c.IsSet("s") {
 			return xerrors.Errorf("Usage: ubi verify [input.json]")
 		}
 
@@ -855,10 +863,15 @@ var verifyCmd = &cli.Command{
 		//if height == 0 {
 		//	return fmt.Errorf("must be specify a height")
 		//}
-
-		inb, err := os.ReadFile(c.Args().First())
-		if err != nil {
-			return xerrors.Errorf("reading input file: %w", err)
+		var inb []byte
+		if c.IsSet("s") {
+			inb = []byte(c.String("s"))
+		} else {
+			var err error
+			inb, err = os.ReadFile(c.Args().First())
+			if err != nil {
+				return xerrors.Errorf("reading input file: %w", err)
+			}
 		}
 
 		var svi prooftypes.SealVerifyInfo
