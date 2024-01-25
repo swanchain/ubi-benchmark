@@ -18,7 +18,6 @@ import (
 	"github.com/swanchain/ubi-benchmark/utils"
 	"golang.org/x/crypto/blake2b"
 	"io"
-	"io/fs"
 	"math/big"
 	"math/rand"
 	"net/http"
@@ -107,8 +106,6 @@ func main() {
 			c1Cmd,
 			c2Cmd,
 			verifyCmd,
-			batchC1Cmd,
-			uploadC1Cmd,
 		},
 	}
 
@@ -554,13 +551,8 @@ var c2Cmd = &cli.Command{
 		}
 
 		paramsFile := c.Args().First()
-		inParamPath, ok := os.LookupEnv("UBI_TASK_IN_PARAM_PATH")
-		if ok {
-			paramsFile = filepath.Join(inParamPath, "input.json")
-		}
-
 		if strings.TrimSpace(paramsFile) == "" {
-			return xerrors.Errorf("input param is empty")
+			return xerrors.Errorf("input json param is empty")
 		}
 
 		sdir := c.String("storage-dir")
@@ -568,6 +560,7 @@ var c2Cmd = &cli.Command{
 			return err
 		}
 
+		log.Infof("json param file of c1: %s", paramsFile)
 		inb, err := os.ReadFile(paramsFile)
 		if err != nil {
 			return xerrors.Errorf("reading input file: %w", err)
@@ -642,224 +635,14 @@ var c2Cmd = &cli.Command{
 	},
 }
 
-var batchC1Cmd = &cli.Command{
-	Name:      "batch",
-	Usage:     "execute batch Commit1 task",
-	ArgsUsage: "[input.json]",
-	Hidden:    true,
-	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:  "storage-dir",
-			Usage: "path to the storage directory that will store sectors long term",
-		},
-		&cli.Int64Flag{
-			Name:  "start",
-			Usage: "specify a height",
-		},
-		&cli.IntFlag{
-			Name:  "num",
-			Usage: "number of batches generated",
-			Value: 1,
-		},
-	},
-	Action: func(c *cli.Context) error {
-		if !c.Args().Present() {
-			return xerrors.Errorf("Usage: ubi-bench batch [input.json]")
-		}
-		num := c.Int("num")
-
-		height := c.Int64("start")
-		if height == 0 {
-			return fmt.Errorf("must be specify a height")
-		}
-
-		sdir := c.String("storage-dir")
-		if _, err := os.Stat(sdir); err != nil && os.IsNotExist(err) {
-			return err
-		}
-		sbfs := &basicfs.Provider{
-			Root: sdir,
-		}
-		sb, err := ffiwrapper.New(sbfs)
-		if err != nil {
-			return err
-		}
-
-		inb, err := os.ReadFile(c.Args().First())
-		if err != nil {
-			return xerrors.Errorf("reading input file: %w", err)
-		}
-		var c1in Commit1In
-		if err := json.Unmarshal(inb, &c1in); err != nil {
-			return xerrors.Errorf("unmarshalling input file: %w", err)
-		}
-
-		maddr, err := address.NewFromString("t0" + c1in.Sid.ID.Miner.String())
-		if err != nil {
-			return err
-		}
-
-		for i := 0; i < num; i++ {
-			randomness, err := utils.GetRandomness(maddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height+int64(i))
-			if err != nil {
-				return err
-			}
-
-			seed := lapi.SealSeed{
-				Epoch: abi.ChainEpoch(height + int64(i)),
-				Value: randomness,
-			}
-
-			c1o, err := sb.SealCommit1(context.TODO(), c1in.Sid, c1in.Ticket, seed.Value, c1in.Piece, c1in.Cids)
-			if err != nil {
-				return err
-			}
-
-			var c2in = new(Commit2In)
-			c2in.SectorNum = int64(c1in.Sid.ID.Number)
-			c2in.SectorSize = uint64(c1in.SectorSize)
-			c2in.Cids = c1in.Cids
-			c2in.Sid = c1in.Sid
-			c2in.Ticket = c1in.Ticket
-			c2in.Seed = seed
-			c2inBytes, err := json.Marshal(c2in)
-			if err != nil {
-				return err
-			}
-
-			taskDir := filepath.Join(filepath.Dir(sdir), fmt.Sprintf("%d-%d-%d-%d", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Sid.ProofType, c2in.Seed.Epoch))
-			err = os.MkdirAll(taskDir, 0775) //nolint:gosec
-			if err != nil {
-				return xerrors.Errorf("creating task dir: %w", err)
-			}
-
-			c2JsonFile := filepath.Join(taskDir, fmt.Sprintf("c1out-%d-%d-%d-verify.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Seed.Epoch))
-			if err = os.WriteFile(c2JsonFile, c2inBytes, 0666); err != nil {
-				return err
-			}
-
-			c2in.Phase1Out = c1o
-			c2inBytesWithC1, err := json.Marshal(c2in)
-			if err != nil {
-				return err
-			}
-			c1JsonFile := filepath.Join(taskDir, fmt.Sprintf("c1out-%d-%d-%d.zst", c1in.Sid.ID.Miner, c1in.Sid.ID.Number, seed.Epoch))
-			if err = utils.CompressDataToFile(c1JsonFile, c2inBytesWithC1); err != nil {
-				return err
-			}
-
-			log.Infof("seal: commit phase1 finished, sector_id: %d, num: %d\n", c1in.Sid.ID.Number, i)
-		}
-		return nil
-	},
-}
-
-var uploadC1Cmd = &cli.Command{
-	Name:   "upload",
-	Usage:  "Batch upload the results of c1 to mcs",
-	Hidden: true,
-	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:  "c1-dir",
-			Usage: "path to the c1 out directory",
-		},
-	},
-	Action: func(c *cli.Context) error {
-		c1Dir := c.String("c1-dir")
-		if _, err := os.Stat(c1Dir); err != nil && os.IsNotExist(err) {
-			return err
-		}
-
-		if err := utils.InitConfig(); err != nil {
-			return err
-		}
-
-		var count int
-		storageService := utils.NewStorageService()
-		err := filepath.WalkDir(c1Dir, func(path string, d fs.DirEntry, err error) error {
-			split := strings.Split(d.Name(), "-")
-			if d.IsDir() && len(split) == 4 {
-				storageService.CreateFolder("fil-c2", d.Name())
-				files, err := os.ReadDir(path)
-				if err != nil {
-					return err
-				}
-				var inputParam, verifyParam string
-				for _, f := range files {
-					mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join("fil-c2", d.Name(), f.Name()), filepath.Join(path, f.Name()), true)
-					if err != nil {
-						log.Errorf("Failed upload file to bucket, error: %v", err)
-						return err
-					}
-					gatewayUrl, err := storageService.GetGatewayUrl()
-					if err != nil {
-						log.Errorf("Failed get mcs ipfs gatewayUrl, error: %v", err)
-						return err
-					}
-
-					fileUrl := *gatewayUrl + "/ipfs/" + mcsOssFile.PayloadCid
-					fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
-					if strings.Contains(f.Name(), "verify") {
-						verifyParam = fileUrl
-					} else {
-						inputParam = fileUrl
-					}
-				}
-
-				var task Task
-				if count/2 == 0 {
-					task = Task{
-						Name:        d.Name(),
-						Type:        0,
-						ZkType:      "fil-c2-512M",
-						InputParam:  inputParam,
-						VerifyParam: verifyParam,
-						ResourceID:  CPU512,
-					}
-				} else {
-					task = Task{
-						Name:        d.Name(),
-						Type:        1,
-						ZkType:      "fil-c2-512M",
-						InputParam:  inputParam,
-						VerifyParam: verifyParam,
-						ResourceID:  GPU512,
-					}
-				}
-				DoSend(task)
-				count++
-				fmt.Println("==============")
-			}
-			if err != nil {
-				return err
-			}
-
-			return nil
-		})
-
-		return err
-	},
-}
-
 var verifyCmd = &cli.Command{
 	Name:      "verify",
 	Usage:     "Verify a proof computation",
 	ArgsUsage: "[input.json]",
-	//Flags: []cli.Flag{
-	//	&cli.Int64Flag{
-	//		Name:  "height",
-	//		Usage: "specify a height",
-	//	},
-	//},
 	Action: func(c *cli.Context) error {
 		if !c.Args().Present() {
 			return xerrors.Errorf("Usage: ubi verify [input.json]")
 		}
-
-		//height := c.Int64("height")
-		//if height == 0 {
-		//	return fmt.Errorf("must be specify a height")
-		//}
 
 		inb, err := os.ReadFile(c.Args().First())
 		if err != nil {
@@ -870,17 +653,6 @@ var verifyCmd = &cli.Command{
 		if err := json.Unmarshal(inb, &svi); err != nil {
 			return xerrors.Errorf("unmarshalling input file: %w", err)
 		}
-
-		//maddr, err := address.NewFromString("t0" + svi.Miner.String())
-		//if err != nil {
-		//	return err
-		//}
-		//
-		//randomness, err := utils.GetRandomness(maddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height)
-		//if err != nil {
-		//	return err
-		//}
-		//svi.InteractiveRandomness = randomness
 
 		ok, err := ffiwrapper.ProofVerifier.VerifySeal(svi)
 		if err != nil {

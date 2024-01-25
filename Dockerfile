@@ -64,11 +64,11 @@ COPY --from=ubi-builder /opt/ubi-benchmark/ubi-bench /usr/local/bin/
 ENV FFI_BUILD_FROM_SOURCE=1
 ENV TRUST_PARAMS=1
 ENV RUST_LOG=Info
-ENV UBI_TASK_IN_PARAM_PATH /var/tmp/fil-c2-param
 ENV FILECOIN_PARAMETER_CACHE /var/tmp/filecoin-proof-parameters
 
 RUN apt update && apt-get install -y coreutils vim
 RUN mkdir /var/tmp/filecoin-proof-parameters
+RUN mkdir /var/tmp/fil-c2-param
 RUN chown fc: /var/tmp/filecoin-proof-parameters
 
 
