@@ -595,6 +595,7 @@ var c2Cmd = &cli.Command{
 			"zk_type":    os.Getenv("ZK_TYPE"),
 			"name_space": os.Getenv("NAME_SPACE"),
 			"proof":      base64.StdEncoding.EncodeToString(proof),
+			"parm_path":  os.Getenv("PARAM_PATH"),
 		}
 
 		payload, err := json.Marshal(reqParam)
