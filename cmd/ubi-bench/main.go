@@ -543,16 +543,18 @@ var c2Cmd = &cli.Command{
 		},
 	},
 	Action: func(c *cli.Context) error {
+		paramsFile := c.Args().First()
+		if strings.TrimSpace(paramsFile) == "" {
+			return xerrors.Errorf("input json param is empty")
+		}
+		defer func() {
+			_ = os.Remove(paramsFile)
+		}()
 		if c.Bool("no-gpu") {
 			err := os.Setenv("BELLMAN_NO_GPU", "1")
 			if err != nil {
 				return xerrors.Errorf("setting no-gpu flag: %w", err)
 			}
-		}
-
-		paramsFile := c.Args().First()
-		if strings.TrimSpace(paramsFile) == "" {
-			return xerrors.Errorf("input json param is empty")
 		}
 
 		sdir := c.String("storage-dir")
