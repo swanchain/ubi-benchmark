@@ -789,7 +789,7 @@ var uploadC1Cmd = &cli.Command{
 				}
 
 				var task Task
-				if count/2 == 0 {
+				if count%2 == 0 {
 					var resourceId int
 					if numType == "512" {
 						resourceId = CPU512
