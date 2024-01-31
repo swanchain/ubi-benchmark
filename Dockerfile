@@ -36,6 +36,7 @@ ENV FFI_BUILD_FROM_SOURCE=${FFI_BUILD_FROM_SOURCE}
 ENV RUSTFLAGS="-C target-cpu=native -g"
 ENV FFI_USE_CUDA=1
 
+RUN echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc && source ~/.bashrc
 RUN make clean build
 
 #####################################
