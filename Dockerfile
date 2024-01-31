@@ -35,8 +35,11 @@ ARG FFI_BUILD_FROM_SOURCE=1
 ENV FFI_BUILD_FROM_SOURCE=${FFI_BUILD_FROM_SOURCE}
 ENV RUSTFLAGS="-C target-cpu=native -g"
 ENV FFI_USE_CUDA=1
+ENV PATH=/usr/local/cuda-11.2/bin${PATH:+:${PATH}}
+ENV LD_LIBRARY_PATH=/usr/local/cuda-11.2/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=$PATH:/usr/local/go/bin
 
-RUN echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc && source ~/.bashrc
 RUN make clean build
 
 #####################################
