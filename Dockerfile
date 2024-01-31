@@ -1,8 +1,5 @@
 #####################################
-FROM golang:1.20.7-bullseye AS ubi-builder
-
-RUN apt-get update && apt-get install -y ca-certificates build-essential clang ocl-icd-opencl-dev ocl-icd-libopencl1 jq libhwloc-dev
-
+FROM sxk1633/lotus-compile-cuda:11.4 AS ubi-builder
 ENV XDG_CACHE_HOME="/tmp"
 
 ### taken from https://github.com/rust-lang/docker-rust/blob/master/1.63.0/buster/Dockerfile
@@ -34,46 +31,26 @@ WORKDIR /opt/ubi-benchmark
 
 
 ### make configurable filecoin-ffi build
-ARG FFI_BUILD_FROM_SOURCE=0
+ARG FFI_BUILD_FROM_SOURCE=1
 ENV FFI_BUILD_FROM_SOURCE=${FFI_BUILD_FROM_SOURCE}
+ENV RUSTFLAGS="-C target-cpu=native -g"
+ENV FFI_USE_CUDA=1
 
 RUN make clean build
 
 #####################################
-FROM ubuntu:20.04 AS ubi-base
-
-# Base resources
-COPY --from=ubi-builder /etc/ssl/certs                           /etc/ssl/certs
-COPY --from=ubi-builder /lib/*/libdl.so.2         /lib/
-COPY --from=ubi-builder /lib/*/librt.so.1         /lib/
-COPY --from=ubi-builder /lib/*/libgcc_s.so.1      /lib/
-COPY --from=ubi-builder /lib/*/libutil.so.1       /lib/
-COPY --from=ubi-builder /usr/lib/*/libltdl.so.7   /lib/
-COPY --from=ubi-builder /usr/lib/*/libnuma.so.1   /lib/
-COPY --from=ubi-builder /usr/lib/*/libhwloc.so.*  /lib/
-COPY --from=ubi-builder /usr/lib/*/libOpenCL.so.1 /lib/
-
-RUN useradd -r -u 532 -U fc \
- && mkdir -p /etc/OpenCL/vendors \
- && echo "libnvidia-opencl.so.1" > /etc/OpenCL/vendors/nvidia.icd
-
-#####################################
-FROM ubi-base AS ubi-benchmark
+FROM ubuntu:20.04 AS ubi-benchmark
 
 COPY --from=ubi-builder /opt/ubi-benchmark/ubi-bench /usr/local/bin/
-ENV FFI_BUILD_FROM_SOURCE=1
 ENV TRUST_PARAMS=1
 ENV RUST_LOG=Info
+ENV UBI_TASK_IN_PARAM_PATH /var/tmp/fil-c2-param
 ENV FILECOIN_PARAMETER_CACHE /var/tmp/filecoin-proof-parameters
 
-RUN apt update && apt-get install -y coreutils vim
+RUN apt-get update && apt-get install -y hwloc libhwloc-dev coreutils vim
 RUN mkdir /var/tmp/filecoin-proof-parameters
-RUN mkdir /var/tmp/fil-c2-param
 RUN chown fc: /var/tmp/filecoin-proof-parameters
 
-
 VOLUME /var/tmp/filecoin-proof-parameters
-
-USER fc
 
 CMD ["/bin/bash", "-c", "sleep infinity"]
