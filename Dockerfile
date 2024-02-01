@@ -53,7 +53,6 @@ ENV FILECOIN_PARAMETER_CACHE /var/tmp/filecoin-proof-parameters
 
 RUN apt-get update && apt-get install -y hwloc libhwloc-dev coreutils vim
 RUN mkdir /var/tmp/filecoin-proof-parameters
-RUN chown fc: /var/tmp/filecoin-proof-parameters
 
 VOLUME /var/tmp/filecoin-proof-parameters
 

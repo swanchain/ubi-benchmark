@@ -16,6 +16,7 @@ import (
 	"github.com/filswan/go-mcs-sdk/mcs/api/common/logs"
 	"github.com/mitchellh/go-homedir"
 	"github.com/swanchain/ubi-benchmark/utils"
+	"github.com/valyala/gozstd"
 	"golang.org/x/crypto/blake2b"
 	"io"
 	"math/big"
@@ -23,7 +24,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -543,13 +543,29 @@ var c2Cmd = &cli.Command{
 		},
 	},
 	Action: func(c *cli.Context) error {
-		paramsFile := c.Args().First()
-		if strings.TrimSpace(paramsFile) == "" {
-			return xerrors.Errorf("input json param is empty")
+		paramUrl := os.Getenv("PARAM_URL")
+		log.Infof("get param from mcs url: %s", paramUrl)
+		paramResp, err := http.Get(paramUrl)
+		if err != nil {
+			return fmt.Errorf("error making request to Space API: %+v", err)
 		}
-		defer func() {
-			_ = os.Remove(paramsFile)
-		}()
+		defer paramResp.Body.Close()
+		if paramResp.StatusCode != http.StatusOK {
+			return fmt.Errorf("space API response not OK. Status Code: %d", paramResp.StatusCode)
+		}
+
+		outBytes, err := io.ReadAll(paramResp.Body)
+		if err != nil {
+			fmt.Println("read body failed, error:", err)
+			return err
+		}
+
+		paramsIn, err := gozstd.Decompress(nil, outBytes)
+		if err != nil {
+			fmt.Println("decompress response bytes failed, error:", err)
+			return err
+		}
+
 		if c.Bool("no-gpu") {
 			err := os.Setenv("BELLMAN_NO_GPU", "1")
 			if err != nil {
@@ -562,14 +578,8 @@ var c2Cmd = &cli.Command{
 			return err
 		}
 
-		log.Infof("json param file of c1: %s", paramsFile)
-		inb, err := os.ReadFile(paramsFile)
-		if err != nil {
-			return xerrors.Errorf("reading input file: %w", err)
-		}
-
 		var c2in Commit2In
-		if err := json.Unmarshal(inb, &c2in); err != nil {
+		if err := json.Unmarshal(paramsIn, &c2in); err != nil {
 			return xerrors.Errorf("unmarshalling input file: %w", err)
 		}
 
