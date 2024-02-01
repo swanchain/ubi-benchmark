@@ -543,15 +543,24 @@ var c2Cmd = &cli.Command{
 		},
 	},
 	Action: func(c *cli.Context) error {
+
+		paramTransport := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		paramClient := &http.Client{
+			Transport: paramTransport,
+			Timeout:   20 * time.Second,
+		}
+
 		paramUrl := os.Getenv("PARAM_URL")
 		log.Infof("get param from mcs url: %s", paramUrl)
-		paramResp, err := http.Get(paramUrl)
+		paramResp, err := paramClient.Get(paramUrl)
 		if err != nil {
-			return fmt.Errorf("error making request to Space API: %+v", err)
+			return fmt.Errorf("error making request to mcs url: %+v", err)
 		}
 		defer paramResp.Body.Close()
 		if paramResp.StatusCode != http.StatusOK {
-			return fmt.Errorf("space API response not OK. Status Code: %d", paramResp.StatusCode)
+			return fmt.Errorf("mcs response not OK. Status Code: %d", paramResp.StatusCode)
 		}
 
 		outBytes, err := io.ReadAll(paramResp.Body)
