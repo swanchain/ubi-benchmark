@@ -33,7 +33,7 @@ COPY ./ /opt/ubi-benchmark
 WORKDIR /opt/ubi-benchmark
 
 ### make configurable filecoin-ffi build
-ARG FFI_BUILD_FROM_SOURCE=1
+ARG FFI_BUILD_FROM_SOURCE=0
 ENV FFI_BUILD_FROM_SOURCE=${FFI_BUILD_FROM_SOURCE}
 ENV RUSTFLAGS="-C target-cpu=native -g"
 
