@@ -1,5 +1,5 @@
 #####################################
-FROM sxk1633/lotus-compile-cuda:11.4 AS ubi-builder
+FROM golang:1.20.7-bullseye AS ubi-builder
 ENV XDG_CACHE_HOME="/tmp"
 
 ### taken from https://github.com/rust-lang/docker-rust/blob/master/1.63.0/buster/Dockerfile
