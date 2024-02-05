@@ -1,5 +1,8 @@
 #####################################
 FROM golang:1.20.7-bullseye AS ubi-builder
+
+RUN apt-get update && apt-get install -y ca-certificates build-essential clang ocl-icd-opencl-dev ocl-icd-libopencl1 jq libhwloc-dev
+
 ENV XDG_CACHE_HOME="/tmp"
 
 ### taken from https://github.com/rust-lang/docker-rust/blob/master/1.63.0/buster/Dockerfile
