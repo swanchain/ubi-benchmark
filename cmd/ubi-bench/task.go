@@ -30,7 +30,6 @@ func DoSend(task Task) {
 		return
 	}
 
-	// 发送POST请求
 	url := utils.GetConfig().MCS.HubUrl
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
