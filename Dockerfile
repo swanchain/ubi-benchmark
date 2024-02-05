@@ -46,8 +46,9 @@ COPY --from=ubi-builder /opt/ubi-benchmark/ubi-bench /usr/local/bin/
 ENV TRUST_PARAMS=1
 ENV RUST_LOG=Info
 ENV FILECOIN_PARAMETER_CACHE /var/tmp/filecoin-proof-parameters
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y hwloc libhwloc-dev coreutils
+RUN apt-get update && apt-get install -y hwloc libhwloc-dev
 RUN mkdir /var/tmp/filecoin-proof-parameters
 
 VOLUME /var/tmp/filecoin-proof-parameters
