@@ -532,10 +532,6 @@ var c2Cmd = &cli.Command{
 	Usage:     "execute c2 task for a proof computation",
 	ArgsUsage: "[input.json]",
 	Flags: []cli.Flag{
-		&cli.BoolFlag{
-			Name:  "no-gpu",
-			Usage: "disable gpu usage for the benchmark run",
-		},
 		&cli.StringFlag{
 			Name:  "storage-dir",
 			Usage: "path to the storage directory that will store sectors long term",
@@ -573,13 +569,6 @@ var c2Cmd = &cli.Command{
 		if err != nil {
 			fmt.Println("decompress response bytes failed, error:", err)
 			return err
-		}
-
-		if c.Bool("no-gpu") {
-			err := os.Setenv("BELLMAN_NO_GPU", "1")
-			if err != nil {
-				return xerrors.Errorf("setting no-gpu flag: %w", err)
-			}
 		}
 
 		sdir := c.String("storage-dir")

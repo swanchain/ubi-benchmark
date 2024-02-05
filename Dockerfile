@@ -29,16 +29,10 @@ RUN set -eux; \
 COPY ./ /opt/ubi-benchmark
 WORKDIR /opt/ubi-benchmark
 
-
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=1
 ENV FFI_BUILD_FROM_SOURCE=${FFI_BUILD_FROM_SOURCE}
 ENV RUSTFLAGS="-C target-cpu=native -g"
-ENV FFI_USE_CUDA=1
-ENV PATH=/usr/local/cuda-11.2/bin${PATH:+:${PATH}}
-ENV LD_LIBRARY_PATH=/usr/local/cuda-11.2/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
-ENV CUDA_HOME=/usr/local/cuda
-ENV PATH=$PATH:/usr/local/go/bin
 
 RUN make clean build
 
@@ -48,10 +42,9 @@ FROM ubuntu:20.04 AS ubi-benchmark
 COPY --from=ubi-builder /opt/ubi-benchmark/ubi-bench /usr/local/bin/
 ENV TRUST_PARAMS=1
 ENV RUST_LOG=Info
-ENV UBI_TASK_IN_PARAM_PATH /var/tmp/fil-c2-param
 ENV FILECOIN_PARAMETER_CACHE /var/tmp/filecoin-proof-parameters
 
-RUN apt-get update && apt-get install -y hwloc libhwloc-dev coreutils vim
+RUN apt-get update && apt-get install -y hwloc libhwloc-dev coreutils
 RUN mkdir /var/tmp/filecoin-proof-parameters
 
 VOLUME /var/tmp/filecoin-proof-parameters
