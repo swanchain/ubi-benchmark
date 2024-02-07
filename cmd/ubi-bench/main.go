@@ -811,6 +811,10 @@ var daemonCmd = &cli.Command{
 			Name:  "last-height",
 			Usage: "specify a height",
 		},
+		&cli.Int64Flag{
+			Name:  "sector-type",
+			Usage: "512 or 32",
+		},
 	},
 	Action: func(c *cli.Context) error {
 		if !c.Args().Present() {
@@ -819,7 +823,16 @@ var daemonCmd = &cli.Command{
 
 		height := c.Int64("last-height")
 		if height == 0 {
-			return fmt.Errorf("must be specify a height")
+			return fmt.Errorf("must be specify a last-height")
+		}
+
+		sectorType := c.Int64("sector-type")
+		if sectorType == 0 {
+			return fmt.Errorf("must be specify a sector-type")
+		}
+
+		if sectorType != 512 && sectorType != 32 {
+			return fmt.Errorf("sector-type value is wrong")
 		}
 
 		sdir := c.String("storage-dir")
@@ -859,7 +872,7 @@ var daemonCmd = &cli.Command{
 		for {
 			select {
 			case <-ticker.C:
-				checkTaskCount(maddr, sb, sdir, c1in, latestHeight)
+				checkTaskCount(maddr, sb, sdir, c1in, latestHeight, sectorType)
 			}
 		}
 	},
@@ -924,7 +937,7 @@ var verifyCmd = &cli.Command{
 	},
 }
 
-func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height int64) {
+func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height, sectorType int64) {
 	response, err := http.Get(utils.GetConfig().HUB.TaskUrl)
 	if err != nil {
 		log.Errorf("Error making GET request: %v", err)
@@ -945,84 +958,115 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 		return
 	}
 
-	sort.Sort(taskStats.Data)
 	log.Infof("current task stats: %+v", taskStats.Data)
-	if len(taskStats.Data) > 0 {
-		var needTask = taskStats.Data[0]
-		if needTask.Count < 2000 {
-			var dirName, zkType string
-			if needTask.ResourceId == CPU512 || needTask.ResourceId == GPU512 {
-				dirName = "fil-c2/512M"
-				zkType = "fil-c2-512M"
-			} else if needTask.ResourceId == CPU32G || needTask.ResourceId == GPU32G {
-				dirName = "fil-c2/32G"
-				zkType = "fil-c2-32G"
-			}
-			var taskType int
-			if needTask.ResourceId == CPU512 || needTask.ResourceId == CPU32G {
-				taskType = 0
-			} else {
-				taskType = 1
-			}
-
-			for i := 0; i < utils.GetConfig().HUB.BatchNum; i++ {
-				rootDir, taskDir, err := generaC1Out(mAddr, sealer, sdir, c1in, height+int64(i))
-				if err != nil {
-					log.Errorf("Error response convet to json: %v", err)
-					return
-				}
-
-				storageService := utils.NewStorageService()
-				storageService.CreateFolder(dirName, taskDir)
-
-				err = filepath.Walk(rootDir, func(path string, f fs.FileInfo, err error) error {
-					if f.IsDir() {
-						return nil
-					}
-					var inputParam, verifyParam string
-					mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join(dirName, taskDir, f.Name()), path, true)
-					if err != nil {
-						log.Errorf("Failed upload file to bucket, error: %v", err)
-						return err
-					}
-					gatewayUrl, err := storageService.GetGatewayUrl()
-					if err != nil {
-						log.Errorf("Failed get mcs ipfs gatewayUrl, error: %v", err)
-						return err
-					}
-
-					fileUrl := *gatewayUrl + "/ipfs/" + mcsOssFile.PayloadCid
-					fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
-					if strings.Contains(f.Name(), "verify") {
-						verifyParam = fileUrl
-					} else {
-						inputParam = fileUrl
-					}
-
-					var task = Task{
-						Name:        taskDir,
-						Type:        taskType,
-						ZkType:      zkType,
-						InputParam:  inputParam,
-						VerifyParam: verifyParam,
-						ResourceID:  needTask.ResourceId,
-					}
-					DoSend(task)
-					fmt.Println("==============")
-					if err != nil {
-						return err
-					}
-					return nil
-				})
-				latestHeight++
-				if err != nil {
-					log.Errorf("upload file to mcs failed, task: %s, zkType: %s", taskDir, zkType)
-					continue
-				}
-				os.RemoveAll(rootDir)
-			}
+	var rc512, rc32 ResourceCountList
+	for _, t := range taskStats.Data {
+		if sectorType == 512 && (t.ResourceId == CPU512 || t.ResourceId == GPU512) {
+			rc512 = append(rc512, t)
+		}
+		if sectorType == 32 && (t.ResourceId == CPU32G || t.ResourceId == GPU32G) {
+			rc32 = append(rc32, t)
 		}
 	}
+
+	var dirName, zkType string
+	var taskType int
+	var needTask ResourceCount
+	if sectorType == 512 {
+		sort.Sort(rc512)
+		if len(rc512) > 0 {
+			needTask = rc512[0]
+			if needTask.Count < 2000 {
+				dirName = "fil-c2/512M"
+				zkType = "fil-c2-512M"
+				if needTask.ResourceId == CPU512 {
+					taskType = 0
+				} else {
+					taskType = 1
+				}
+			} else {
+				return
+			}
+		} else {
+			return
+		}
+	} else {
+		sort.Sort(rc32)
+		if len(rc32) > 0 {
+			needTask = rc32[0]
+			if needTask.Count < 2000 {
+				dirName = "fil-c2/32G"
+				zkType = "fil-c2-32G"
+				if needTask.ResourceId == CPU32G {
+					taskType = 0
+				} else {
+					taskType = 1
+				}
+			} else {
+				return
+			}
+		} else {
+			return
+		}
+	}
+
+	for i := 0; i < utils.GetConfig().HUB.BatchNum; i++ {
+		rootDir, taskDir, err := generaC1Out(mAddr, sealer, sdir, c1in, height+int64(i))
+		if err != nil {
+			log.Errorf("Error response convet to json: %v", err)
+			return
+		}
+
+		storageService := utils.NewStorageService()
+		storageService.CreateFolder(dirName, taskDir)
+
+		err = filepath.Walk(rootDir, func(path string, f fs.FileInfo, err error) error {
+			if f.IsDir() {
+				return nil
+			}
+			var inputParam, verifyParam string
+			mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join(dirName, taskDir, f.Name()), path, true)
+			if err != nil {
+				log.Errorf("Failed upload file to bucket, error: %v", err)
+				return err
+			}
+			gatewayUrl, err := storageService.GetGatewayUrl()
+			if err != nil {
+				log.Errorf("Failed get mcs ipfs gatewayUrl, error: %v", err)
+				return err
+			}
+
+			fileUrl := *gatewayUrl + "/ipfs/" + mcsOssFile.PayloadCid
+			fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
+			if strings.Contains(f.Name(), "verify") {
+				verifyParam = fileUrl
+			} else {
+				inputParam = fileUrl
+			}
+
+			var task = Task{
+				Name:        taskDir,
+				Type:        taskType,
+				ZkType:      zkType,
+				InputParam:  inputParam,
+				VerifyParam: verifyParam,
+				ResourceID:  needTask.ResourceId,
+			}
+			DoSend(task)
+			fmt.Println("==============")
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		latestHeight++
+		if err != nil {
+			log.Errorf("upload file to mcs failed, task: %s, zkType: %s", taskDir, zkType)
+			continue
+		}
+		os.RemoveAll(rootDir)
+	}
+
 }
 
 func generaC1Out(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height int64) (string, string, error) {
