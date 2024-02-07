@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/big"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,6 +40,7 @@ import (
 )
 
 var log = logging.Logger("ubi-bench")
+var latestHeight int64
 
 type BenchResults struct {
 	EnvVar map[string]string
@@ -104,6 +108,7 @@ func main() {
 			verifyCmd,
 			batchC1Cmd,
 			uploadC1Cmd,
+			daemonCmd,
 		},
 	}
 
@@ -667,55 +672,10 @@ var batchC1Cmd = &cli.Command{
 		}
 
 		for i := 0; i < num; i++ {
-			randomness, err := utils.GetRandomness(maddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height+int64(i))
+			_, _, err := generaC1Out(maddr, sb, sdir, c1in, height+int64(i))
 			if err != nil {
 				return err
 			}
-
-			seed := lapi.SealSeed{
-				Epoch: abi.ChainEpoch(height + int64(i)),
-				Value: randomness,
-			}
-
-			c1o, err := sb.SealCommit1(context.TODO(), c1in.Sid, c1in.Ticket, seed.Value, c1in.Piece, c1in.Cids)
-			if err != nil {
-				return err
-			}
-
-			var c2in = new(Commit2In)
-			c2in.SectorNum = int64(c1in.Sid.ID.Number)
-			c2in.SectorSize = uint64(c1in.SectorSize)
-			c2in.Cids = c1in.Cids
-			c2in.Sid = c1in.Sid
-			c2in.Ticket = c1in.Ticket
-			c2in.Seed = seed
-			c2inBytes, err := json.Marshal(c2in)
-			if err != nil {
-				return err
-			}
-
-			taskDir := filepath.Join(filepath.Dir(sdir), fmt.Sprintf("%d-%d-%d-%d", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Sid.ProofType, c2in.Seed.Epoch))
-			err = os.MkdirAll(taskDir, 0775) //nolint:gosec
-			if err != nil {
-				return xerrors.Errorf("creating task dir: %w", err)
-			}
-
-			c2JsonFile := filepath.Join(taskDir, fmt.Sprintf("c1out-%d-%d-%d-verify.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Seed.Epoch))
-			if err = os.WriteFile(c2JsonFile, c2inBytes, 0666); err != nil {
-				return err
-			}
-
-			c2in.Phase1Out = c1o
-			c2inBytesWithC1, err := json.Marshal(c2in)
-			if err != nil {
-				return err
-			}
-			c1JsonFile := filepath.Join(taskDir, fmt.Sprintf("c1out-%d-%d-%d.zst", c1in.Sid.ID.Miner, c1in.Sid.ID.Number, seed.Epoch))
-			if err = utils.CompressDataToFile(c1JsonFile, c2inBytesWithC1); err != nil {
-				return err
-			}
-
-			log.Infof("seal: commit phase1 finished, sector_id: %d, num: %d\n", c1in.Sid.ID.Number, i)
 		}
 		return nil
 	},
@@ -837,32 +797,93 @@ var uploadC1Cmd = &cli.Command{
 	},
 }
 
+var daemonCmd = &cli.Command{
+	Name:      "daemon",
+	Usage:     "Auto generate c1 out and upload the results of c1 to mcs",
+	ArgsUsage: "[input.json]",
+	Hidden:    true,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "storage-dir",
+			Usage: "path to the storage directory that will store sectors long term",
+		},
+		&cli.Int64Flag{
+			Name:  "last-height",
+			Usage: "specify a height",
+		},
+	},
+	Action: func(c *cli.Context) error {
+		if !c.Args().Present() {
+			return xerrors.Errorf("Usage: ubi-bench batch [input.json]")
+		}
+
+		height := c.Int64("last-height")
+		if height == 0 {
+			return fmt.Errorf("must be specify a height")
+		}
+
+		sdir := c.String("storage-dir")
+		if _, err := os.Stat(sdir); err != nil && os.IsNotExist(err) {
+			return err
+		}
+		sbfs := &basicfs.Provider{
+			Root: sdir,
+		}
+		sb, err := ffiwrapper.New(sbfs)
+		if err != nil {
+			return err
+		}
+
+		inb, err := os.ReadFile(c.Args().First())
+		if err != nil {
+			return xerrors.Errorf("reading input file: %w", err)
+		}
+		var c1in Commit1In
+		if err := json.Unmarshal(inb, &c1in); err != nil {
+			return xerrors.Errorf("unmarshalling input file: %w", err)
+		}
+
+		maddr, err := address.NewFromString("t0" + c1in.Sid.ID.Miner.String())
+		if err != nil {
+			return err
+		}
+
+		if err := utils.InitConfig(); err != nil {
+			return err
+		}
+
+		ticker := time.NewTicker(time.Duration(utils.GetConfig().HUB.CheckInterval) * time.Minute)
+		defer ticker.Stop()
+
+		latestHeight = height
+		for {
+			select {
+			case <-ticker.C:
+				checkTaskCount(maddr, sb, sdir, c1in, latestHeight)
+			}
+		}
+	},
+}
+
 var verifyCmd = &cli.Command{
 	Name:      "verify",
 	Usage:     "Verify a proof computation",
 	ArgsUsage: "[input.json]",
 	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:    "string",
-			Aliases: []string{"s"},
-			Usage:   "input with string representation",
+		&cli.Int64Flag{
+			Name:  "height",
+			Usage: "specify a height",
 		},
 	},
-	//Flags: []cli.Flag{
-	//	&cli.Int64Flag{
-	//		Name:  "height",
-	//		Usage: "specify a height",
-	//	},
-	//},
 	Action: func(c *cli.Context) error {
 		if !c.Args().Present() && !c.IsSet("s") {
 			return xerrors.Errorf("Usage: ubi verify [input.json]")
 		}
 
-		//height := c.Int64("height")
-		//if height == 0 {
-		//	return fmt.Errorf("must be specify a height")
-		//}
+		height := c.Int64("height")
+		if height == 0 {
+			return fmt.Errorf("must be specify a height")
+		}
 		var inb []byte
 		if c.IsSet("s") {
 			inb = []byte(c.String("s"))
@@ -879,16 +900,16 @@ var verifyCmd = &cli.Command{
 			return xerrors.Errorf("unmarshalling input file: %w", err)
 		}
 
-		//maddr, err := address.NewFromString("t0" + svi.Miner.String())
-		//if err != nil {
-		//	return err
-		//}
-		//
-		//randomness, err := utils.GetRandomness(maddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height)
-		//if err != nil {
-		//	return err
-		//}
-		//svi.InteractiveRandomness = randomness
+		maddr, err := address.NewFromString("t0" + svi.Miner.String())
+		if err != nil {
+			return err
+		}
+
+		randomness, err := utils.GetRandomness(maddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height)
+		if err != nil {
+			return err
+		}
+		svi.InteractiveRandomness = randomness
 
 		ok, err := ffiwrapper.ProofVerifier.VerifySeal(svi)
 		if err != nil {
@@ -901,6 +922,163 @@ var verifyCmd = &cli.Command{
 		fmt.Printf("seal: proof for sector %d was valid. \n", svi.SectorID.Number)
 		return nil
 	},
+}
+
+func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height int64) {
+	response, err := http.Get(utils.GetConfig().HUB.TaskUrl)
+	if err != nil {
+		log.Errorf("Error making GET request: %v", err)
+		return
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		log.Errorf("Error reading response body: %v", err)
+		return
+	}
+
+	var taskStats TaskStats
+	err = json.Unmarshal(body, &taskStats)
+	if err != nil {
+		log.Errorf("Error response convet to json: %v", err)
+		return
+	}
+
+	sort.Sort(taskStats.Data)
+	log.Infof("current task stats: %+v", taskStats.Data)
+	if len(taskStats.Data) > 0 {
+		var needTask = taskStats.Data[0]
+		if needTask.Count < 2000 {
+			var dirName, zkType string
+			if needTask.ResourceId == CPU512 || needTask.ResourceId == GPU512 {
+				dirName = "fil-c2/512M"
+				zkType = "fil-c2-512M"
+			} else if needTask.ResourceId == CPU32G || needTask.ResourceId == GPU32G {
+				dirName = "fil-c2/32G"
+				zkType = "fil-c2-32G"
+			}
+			var taskType int
+			if needTask.ResourceId == CPU512 || needTask.ResourceId == CPU32G {
+				taskType = 0
+			} else {
+				taskType = 1
+			}
+
+			for i := 0; i < utils.GetConfig().HUB.BatchNum; i++ {
+				rootDir, taskDir, err := generaC1Out(mAddr, sealer, sdir, c1in, height+int64(i))
+				if err != nil {
+					log.Errorf("Error response convet to json: %v", err)
+					return
+				}
+
+				storageService := utils.NewStorageService()
+				storageService.CreateFolder(dirName, taskDir)
+
+				err = filepath.Walk(rootDir, func(path string, f fs.FileInfo, err error) error {
+					if f.IsDir() {
+						return nil
+					}
+					var inputParam, verifyParam string
+					mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join(dirName, taskDir, f.Name()), path, true)
+					if err != nil {
+						log.Errorf("Failed upload file to bucket, error: %v", err)
+						return err
+					}
+					gatewayUrl, err := storageService.GetGatewayUrl()
+					if err != nil {
+						log.Errorf("Failed get mcs ipfs gatewayUrl, error: %v", err)
+						return err
+					}
+
+					fileUrl := *gatewayUrl + "/ipfs/" + mcsOssFile.PayloadCid
+					fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
+					if strings.Contains(f.Name(), "verify") {
+						verifyParam = fileUrl
+					} else {
+						inputParam = fileUrl
+					}
+
+					var task = Task{
+						Name:        taskDir,
+						Type:        taskType,
+						ZkType:      zkType,
+						InputParam:  inputParam,
+						VerifyParam: verifyParam,
+						ResourceID:  needTask.ResourceId,
+					}
+					DoSend(task)
+					fmt.Println("==============")
+					if err != nil {
+						return err
+					}
+					return nil
+				})
+				latestHeight++
+				if err != nil {
+					log.Errorf("upload file to mcs failed, task: %s, zkType: %s", taskDir, zkType)
+					continue
+				}
+				os.RemoveAll(rootDir)
+			}
+		}
+	}
+}
+
+func generaC1Out(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height int64) (string, string, error) {
+	randomness, err := utils.GetRandomness(mAddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height)
+	if err != nil {
+		return "", "", err
+	}
+
+	seed := lapi.SealSeed{
+		Epoch: abi.ChainEpoch(height),
+		Value: randomness,
+	}
+
+	c1o, err := sealer.SealCommit1(context.TODO(), c1in.Sid, c1in.Ticket, seed.Value, c1in.Piece, c1in.Cids)
+	if err != nil {
+		return "", "", err
+	}
+
+	var c2in = new(Commit2In)
+	c2in.SectorNum = int64(c1in.Sid.ID.Number)
+	c2in.SectorSize = uint64(c1in.SectorSize)
+	c2in.Cids = c1in.Cids
+	c2in.Sid = c1in.Sid
+	c2in.Ticket = c1in.Ticket
+	c2in.Seed = seed
+	c2inBytes, err := json.Marshal(c2in)
+	if err != nil {
+		return "", "", err
+	}
+
+	taskDir := fmt.Sprintf("%d-%d-%d-%d", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Sid.ProofType, c2in.Seed.Epoch)
+	rootDir := filepath.Join(filepath.Dir(sdir), taskDir)
+
+	err = os.MkdirAll(rootDir, 0775) //nolint:gosec
+	if err != nil {
+		return "", "", xerrors.Errorf("creating task dir: %w", err)
+	}
+	log.Infof("create dir: %s", rootDir)
+
+	c2JsonFile := filepath.Join(rootDir, fmt.Sprintf("c1out-%d-%d-%d-verify.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, c2in.Seed.Epoch))
+	if err = os.WriteFile(c2JsonFile, c2inBytes, 0666); err != nil {
+		return "", "", err
+	}
+
+	c2in.Phase1Out = c1o
+	c2inBytesWithC1, err := json.Marshal(c2in)
+	if err != nil {
+		return "", "", err
+	}
+	c1JsonFile := filepath.Join(rootDir, fmt.Sprintf("c1out-%d-%d-%d.zst", c1in.Sid.ID.Miner, c1in.Sid.ID.Number, seed.Epoch))
+	if err = utils.CompressDataToFile(c1JsonFile, c2inBytesWithC1); err != nil {
+		return "", "", err
+	}
+
+	log.Infof("seal: commit phase1 finished, sector_id: %d, num: %d\n", c1in.Sid.ID.Number, height)
+	return rootDir, taskDir, nil
 }
 
 func bps(sectorSize abi.SectorSize, sectorNum int, d time.Duration) string {

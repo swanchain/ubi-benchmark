@@ -3,4 +3,8 @@ ApiKey = "MCS_xxxxx"       # Acquired from "https://www.multichain.storage" -> s
 BucketName = "YOUR-BUCKET-NAME"                  # Acquired from "https://www.multichain.storage" -> bucket -> Add Bucket
 Network = "polygon.mainnet"                   # polygon.mainnet for mainnet, polygon.mumbai for testnet
 
+[HUB]
 HUB_URL ="UBI-TASK-BASE-URL"
+TASK_URL=""
+CHECK_INTERVAL=1
+BATCH_NUM=1

@@ -29,8 +29,9 @@ func DoSend(task Task) {
 		log.Errorf("JSON encoding failed: %v", err)
 		return
 	}
+	log.Infof("send req: %s", string(jsonData))
 
-	url := utils.GetConfig().MCS.HubUrl
+	url := utils.GetConfig().HUB.HubUrl
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Errorf("POST request failed: %v", err)
@@ -38,12 +39,10 @@ func DoSend(task Task) {
 	}
 	defer resp.Body.Close()
 
-	// Check the status code
 	if resp.StatusCode == http.StatusOK {
 		log.Infof("Request successful, status code: %d", resp.StatusCode)
-		// Process the successful response
 	} else {
-		log.Infof("Request failed, status code: %d", resp.StatusCode)
+		log.Errorf("Request failed, status code: %d", resp.StatusCode)
 
 		// Read the error response
 		buf := new(bytes.Buffer)
@@ -51,4 +50,29 @@ func DoSend(task Task) {
 		errBody := buf.String()
 		log.Infof("Error message: %s", errBody)
 	}
+}
+
+type TaskStats struct {
+	Code int               `json:"code"`
+	Msg  string            `json:"msg"`
+	Data ResourceCountList `json:"data"`
+}
+
+type ResourceCount struct {
+	ResourceId int `json:"resource_id"`
+	Count      int `json:"count"`
+}
+
+type ResourceCountList []ResourceCount
+
+func (t ResourceCountList) Len() int {
+	return len(t)
+}
+
+func (t ResourceCountList) Less(i, j int) bool {
+	return t[i].Count < t[j].Count
+}
+
+func (t ResourceCountList) Swap(i, j int) {
+	t[i], t[j] = t[j], t[i]
 }

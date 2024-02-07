@@ -11,13 +11,20 @@ var config *Config
 
 type Config struct {
 	MCS MCS
+	HUB HUB
 }
 
 type MCS struct {
 	ApiKey     string
 	BucketName string
 	Network    string
-	HubUrl     string `toml:"HUB_URL"`
+}
+
+type HUB struct {
+	HubUrl        string `toml:"HUB_URL"`
+	TaskUrl       string `toml:"TASK_URL"`
+	CheckInterval int64  `toml:"CHECK_INTERVAL"`
+	BatchNum      int    `toml:"BATCH_NUM"`
 }
 
 func InitConfig() error {
