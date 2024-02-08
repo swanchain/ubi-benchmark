@@ -800,8 +800,7 @@ var uploadC1Cmd = &cli.Command{
 var daemonCmd = &cli.Command{
 	Name:      "daemon",
 	Usage:     "Auto generate c1 out and upload the results of c1 to mcs",
-	ArgsUsage: "[input.json]",
-	Hidden:    true,
+	ArgsUsage: "[c1in-input.json]",
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "storage-dir",
@@ -1020,11 +1019,11 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 		storageService := utils.NewStorageService()
 		storageService.CreateFolder(dirName, taskDir)
 
+		var inputParam, verifyParam string
 		err = filepath.Walk(rootDir, func(path string, f fs.FileInfo, err error) error {
 			if f.IsDir() {
 				return nil
 			}
-			var inputParam, verifyParam string
 			mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join(dirName, taskDir, f.Name()), path, true)
 			if err != nil {
 				log.Errorf("Failed upload file to bucket, error: %v", err)
@@ -1043,22 +1042,23 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 			} else {
 				inputParam = fileUrl
 			}
-
-			var task = Task{
-				Name:        taskDir,
-				Type:        taskType,
-				ZkType:      zkType,
-				InputParam:  inputParam,
-				VerifyParam: verifyParam,
-				ResourceID:  needTask.ResourceId,
-			}
-			DoSend(task)
-			fmt.Println("==============")
 			if err != nil {
 				return err
 			}
 			return nil
 		})
+
+		var task = Task{
+			Name:        taskDir,
+			Type:        taskType,
+			ZkType:      zkType,
+			InputParam:  inputParam,
+			VerifyParam: verifyParam,
+			ResourceID:  needTask.ResourceId,
+		}
+		DoSend(task)
+		fmt.Println("==============")
+
 		latestHeight++
 		if err != nil {
 			log.Errorf("upload file to mcs failed, task: %s, zkType: %s", taskDir, zkType)
