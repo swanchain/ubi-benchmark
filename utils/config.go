@@ -10,14 +10,20 @@ import (
 var config *Config
 
 type Config struct {
-	MCS MCS
-	HUB HUB
+	MCS  MCS
+	HUB  HUB
+	IPFS IPFS
 }
 
 type MCS struct {
 	ApiKey     string
 	BucketName string
 	Network    string
+}
+
+type IPFS struct {
+	UploadUrl   string
+	DownloadUrl string
 }
 
 type HUB struct {

@@ -4,6 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/docker/go-units"
+	"github.com/filecoin-project/go-address"
+	"github.com/filecoin-project/go-paramfetch"
+	"github.com/filecoin-project/go-state-types/crypto"
+	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
+	"github.com/filecoin-project/lotus/chain/types"
+	lcli "github.com/filecoin-project/lotus/cli"
+	"github.com/filswan/go-mcs-sdk/mcs/api/common/logs"
+	shell "github.com/ipfs/go-ipfs-api"
+	"github.com/mitchellh/go-homedir"
+	"github.com/swanchain/ubi-benchmark/utils"
+	"github.com/urfave/cli/v2"
+	"golang.org/x/crypto/blake2b"
 	"io"
 	"io/fs"
 	"math/big"
@@ -14,18 +27,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/docker/go-units"
-	"github.com/filecoin-project/go-address"
-	"github.com/filecoin-project/go-paramfetch"
-	"github.com/filecoin-project/go-state-types/crypto"
-	"github.com/filecoin-project/lotus/chain/actors/builtin/miner"
-	"github.com/filecoin-project/lotus/chain/types"
-	lcli "github.com/filecoin-project/lotus/cli"
-	"github.com/mitchellh/go-homedir"
-	"github.com/swanchain/ubi-benchmark/utils"
-	"github.com/urfave/cli/v2"
-	"golang.org/x/crypto/blake2b"
 
 	logging "github.com/ipfs/go-log/v2"
 	"golang.org/x/xerrors"
@@ -871,7 +872,8 @@ var daemonCmd = &cli.Command{
 		for {
 			select {
 			case <-ticker.C:
-				checkTaskCount(maddr, sb, sdir, c1in, latestHeight, sectorType)
+				//checkTaskCount(maddr, sb, sdir, c1in, latestHeight, sectorType)
+				checkTaskCountV2(maddr, sb, sdir, c1in, latestHeight, sectorType)
 			}
 		}
 	},
@@ -1069,6 +1071,132 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 
 }
 
+func checkTaskCountV2(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height, sectorType int64) {
+	response, err := http.Get(utils.GetConfig().HUB.TaskUrl)
+	if err != nil {
+		log.Errorf("Error making GET request: %v", err)
+		return
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		log.Errorf("Error reading response body: %v", err)
+		return
+	}
+
+	var taskStats TaskStats
+	err = json.Unmarshal(body, &taskStats)
+	if err != nil {
+		log.Errorf("Error response convet to json: %v", err)
+		return
+	}
+
+	log.Infof("current task stats: %+v", taskStats.Data)
+	var rc512, rc32 ResourceCountList
+	for _, t := range taskStats.Data {
+		if sectorType == 512 && (t.ResourceId == CPU512 || t.ResourceId == GPU512) {
+			rc512 = append(rc512, t)
+		}
+		if sectorType == 32 && (t.ResourceId == CPU32G || t.ResourceId == GPU32G) {
+			rc32 = append(rc32, t)
+		}
+	}
+
+	var zkType string
+	var taskType int
+	var needTask ResourceCount
+	if sectorType == 512 {
+		sort.Sort(rc512)
+		if len(rc512) > 0 {
+			needTask = rc512[0]
+			if needTask.Count < 2000 {
+				//dirName = "fil-c2/512M"
+				zkType = "fil-c2-512M"
+				if needTask.ResourceId == CPU512 {
+					taskType = 0
+				} else {
+					taskType = 1
+				}
+			} else {
+				return
+			}
+		} else {
+			return
+		}
+	} else {
+		sort.Sort(rc32)
+		if len(rc32) > 0 {
+			needTask = rc32[0]
+			if needTask.Count < 2000 {
+				//dirName = "fil-c2/32G"
+				zkType = "fil-c2-32G"
+				if needTask.ResourceId == CPU32G {
+					taskType = 0
+				} else {
+					taskType = 1
+				}
+			} else {
+				return
+			}
+		} else {
+			return
+		}
+	}
+
+	sh := shell.NewShell(utils.GetConfig().IPFS.UploadUrl)
+	for i := 0; i < utils.GetConfig().HUB.BatchNum; i++ {
+		rootDir, taskDir, err := generaC1Out(mAddr, sealer, sdir, c1in, height+int64(i))
+		if err != nil {
+			log.Errorf("Error response convet to json: %v", err)
+			return
+		}
+
+		var inputParam, verifyParam string
+		err = filepath.Walk(rootDir, func(path string, f fs.FileInfo, err error) error {
+			if f.IsDir() {
+				return nil
+			}
+			dataCid, err := uploadFileToIpfs(sh, path)
+			if err != nil {
+				log.Errorf("Failed upload file to ipfs, error: %v", err)
+				return err
+			}
+
+			fileUrl := utils.GetConfig().IPFS.DownloadUrl + "/ipfs/" + dataCid
+			fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
+			if strings.Contains(f.Name(), "verify") {
+				verifyParam = fileUrl
+			} else {
+				inputParam = fileUrl
+			}
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+
+		var task = Task{
+			Name:        taskDir,
+			Type:        taskType,
+			ZkType:      zkType,
+			InputParam:  inputParam,
+			VerifyParam: verifyParam,
+			ResourceID:  needTask.ResourceId,
+		}
+		DoSend(task)
+		fmt.Println("==============")
+
+		latestHeight++
+		if err != nil {
+			log.Errorf("upload file to mcs failed, task: %s, zkType: %s", taskDir, zkType)
+			continue
+		}
+		os.RemoveAll(rootDir)
+	}
+
+}
+
 func generaC1Out(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height int64) (string, string, error) {
 	randomness, err := utils.GetRandomness(mAddr, crypto.DomainSeparationTag_InteractiveSealChallengeSeed, height)
 	if err != nil {
@@ -1140,4 +1268,21 @@ func spt(ssize abi.SectorSize, synth bool) abi.RegisteredSealProof {
 	}
 
 	return spt
+}
+
+func uploadFileToIpfs(sh *shell.Shell, fileName string) (string, error) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		logs.GetLogger().Error(err)
+		return "", err
+	}
+	defer file.Close()
+
+	dataCid, err := sh.Add(file)
+	if err != nil {
+		logs.GetLogger().Error(err)
+		return "", err
+	}
+
+	return dataCid, nil
 }
