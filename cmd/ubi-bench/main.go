@@ -45,6 +45,9 @@ import (
 
 var log = logging.Logger("ubi-bench")
 var latestHeight int64
+var tmpDir string
+
+const UbiProofDir = "ubi-proof"
 
 type BenchResults struct {
 	EnvVar map[string]string
@@ -110,9 +113,15 @@ func main() {
 	}))
 
 	router := r.Group("/api")
-
 	router.GET("/ubi/:miner_id/:sector_id", getC2Proof)
-	router.POST("/cp/ubi", doC2Req)
+	router.POST("/ubi", doC2Req)
+
+	var err error
+	tmpDir, err = os.MkdirTemp("", UbiProofDir)
+	if err != nil {
+		log.Errorf("create ubi proof dir failed, error: %v", err)
+		return
+	}
 
 	srv := &http.Server{
 		Addr:              ":9000",
@@ -155,38 +164,39 @@ func doC2Req(c *gin.Context) {
 			log.Errorf("miner_id: %s, sector_id: %d, do SealCommit2 failed, error: %v", c2in.Sid.ID.Miner.String(), c2in.SectorNum, err)
 			return
 		}
-		log.Info("proof: %v", proof)
-
 		totalTime := time.Since(start)
-		svi := prooftypes.SealVerifyInfo{
-			SectorID:              c2in.Sid.ID,
-			SealedCID:             c2in.Cids.Sealed,
-			SealProof:             c2in.Sid.ProofType,
-			Proof:                 proof,
-			DealIDs:               nil,
-			Randomness:            c2in.Ticket,
-			InteractiveRandomness: c2in.Seed.Value,
-			UnsealedCID:           c2in.Cids.Unsealed,
-		}
+		log.Infof("seal: commit phase 2 finished, total time: %f, miner_id: %s, sector_id: %d, proof: %s", totalTime.Seconds(), c2in.Sid.ID.Miner.String(), c2in.SectorNum, base64.StdEncoding.EncodeToString(proof))
 
-		ok, err := ffiwrapper.ProofVerifier.VerifySeal(svi)
-		if err != nil {
-			log.Errorf("verify miner_id: %s, sector_id: %d, c2 proof failed, error: %v", svi.Miner.String(), c2in.SectorNum, err)
-			return
-		}
-		if !ok {
-			log.Warnf("miner_id: %s, sector_id: %d, proof was invalid", svi.Miner.String(), svi.SectorID.Number)
-			return
-		}
-		log.Infof("miner_id: %s, sector_id: %d, proof was valid", svi.Miner.String(), svi.SectorID.Number)
+		var c2proof C2Proof
+		c2proof.Proof = base64.StdEncoding.EncodeToString(proof)
+		if c2in.Ticket != nil {
+			svi := prooftypes.SealVerifyInfo{
+				SectorID:              c2in.Sid.ID,
+				SealedCID:             c2in.Cids.Sealed,
+				SealProof:             c2in.Sid.ProofType,
+				Proof:                 proof,
+				DealIDs:               nil,
+				Randomness:            c2in.Ticket,
+				InteractiveRandomness: c2in.Seed.Value,
+				UnsealedCID:           c2in.Cids.Unsealed,
+			}
 
-		tmpDir := os.TempDir()
+			ok, err := ffiwrapper.ProofVerifier.VerifySeal(svi)
+			if err != nil {
+				log.Errorf("verify miner_id: %s, sector_id: %d, c2 proof failed, error: %v", svi.Miner.String(), c2in.SectorNum, err)
+				return
+			}
+			if !ok {
+				log.Warnf("miner_id: %s, sector_id: %d, proof was invalid", svi.Miner.String(), svi.SectorID.Number)
+			}
+			c2proof.Verify = ok
+			log.Infof("miner_id: %s, sector_id: %d, proof was valid", svi.Miner.String(), svi.SectorID.Number)
+		}
 		c2JsonFile := filepath.Join(tmpDir, fmt.Sprintf("c2-%d-%d.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number))
 		if err = os.WriteFile(c2JsonFile, []byte(base64.StdEncoding.EncodeToString(proof)), 0666); err != nil {
 			log.Errorf("save miner_id: %s, sector_id: %s, proof file failed, error: %v", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, err)
 			return
 		}
-		log.Info("seal: commit phase 2 finished, total time: %f, miner_id: %s, sector_id: %d", totalTime.Seconds(), svi.Miner.String(), c2in.SectorNum)
 	}()
 
 	c.JSON(http.StatusOK, createResponse(SubmitProof, ""))
@@ -205,7 +215,6 @@ func getC2Proof(c *gin.Context) {
 		return
 	}
 
-	tmpDir := os.TempDir()
 	c2File := filepath.Join(tmpDir, fmt.Sprintf("c2-%s-%s.json", minerId, sectorId))
 
 	if _, err := os.Stat(c2File); err != nil {
@@ -222,6 +231,11 @@ func getC2Proof(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusBadRequest, createDataResponse(SuccessCode, string(data)))
+}
+
+type C2Proof struct {
+	Proof  string
+	Verify bool
 }
 
 var sealCmd = &cli.Command{
