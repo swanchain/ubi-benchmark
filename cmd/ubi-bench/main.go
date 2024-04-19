@@ -46,8 +46,9 @@ import (
 var log = logging.Logger("ubi-bench")
 var latestHeight int64
 var tmpDir string
+var accessToken string
 
-const UbiProofDir = "ubi-proof"
+const UbiProofDir = "zk-proof"
 
 type BenchResults struct {
 	EnvVar map[string]string
@@ -103,7 +104,7 @@ func main() {
 
 	log.Info("Starting ubi-bench")
 	r := gin.Default()
-	r.Use(cors.Middleware(cors.Config{
+	r.Use(AuthMiddleware(), cors.Middleware(cors.Config{
 		Origins:         "*",
 		Methods:         "GET, PUT, POST, DELETE",
 		RequestHeaders:  "Origin, Authorization, Content-Type",
@@ -115,6 +116,12 @@ func main() {
 	router := r.Group("/api")
 	router.GET("/ubi/:miner_id/:sector_id", getC2Proof)
 	router.POST("/ubi", doC2Req)
+
+	token, ok := os.LookupEnv("access_token")
+	if !ok {
+		log.Fatalf("must be set access_token env")
+	}
+	accessToken = token
 
 	var err error
 	tmpDir, err = os.MkdirTemp("", UbiProofDir)
@@ -130,6 +137,18 @@ func main() {
 	}
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("listen: %v\n", err)
+	}
+}
+
+func AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := c.GetHeader("access_token")
+		if token != accessToken {
+			c.JSON(http.StatusUnauthorized, createResponse(AuthFailedCode, ""))
+			c.Abort()
+			return
+		}
+		c.Next()
 	}
 }
 
@@ -234,7 +253,7 @@ func getC2Proof(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusBadRequest, createDataResponse(SuccessCode, string(data)))
+	c.JSON(http.StatusOK, createDataResponse(SuccessCode, string(data)))
 }
 
 type C2Proof struct {
@@ -1294,19 +1313,21 @@ func createDataResponse(code int, data interface{}) Response {
 }
 
 const (
-	SuccessCode   = 200
-	JsonError     = 400
-	ServerError   = 500
-	BadParamError = 5001
+	SuccessCode    = 200
+	AuthFailedCode = 401
+	JsonError      = 400
+	ServerError    = 500
+	BadParamError  = 5001
 
 	SubmitProof = 6000
 	ProofError  = 7003
 )
 
 var codeMsg = map[int]string{
-	BadParamError: "The request parameter is not valid",
-	JsonError:     "An error occurred while converting to json",
-	ServerError:   "server failed",
-	SubmitProof:   "The proof task has been submitted",
-	ProofError:    "An error occurred while executing the calculation task",
+	BadParamError:  "The request parameter is not valid",
+	JsonError:      "An error occurred while converting to json",
+	ServerError:    "server failed",
+	SubmitProof:    "The proof task has been submitted",
+	ProofError:     "An error occurred while executing the calculation task",
+	AuthFailedCode: "the request header missing access_token or access_token is incorrect",
 }
