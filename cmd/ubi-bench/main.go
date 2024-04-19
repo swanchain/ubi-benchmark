@@ -165,7 +165,6 @@ func doC2Req(c *gin.Context) {
 			return
 		}
 		totalTime := time.Since(start)
-		log.Infof("seal: commit phase 2 finished, total time: %f, miner_id: %s, sector_id: %d, proof: %s", totalTime.Seconds(), c2in.Sid.ID.Miner.String(), c2in.SectorNum, base64.StdEncoding.EncodeToString(proof))
 
 		var c2proof C2Proof
 		c2proof.Proof = base64.StdEncoding.EncodeToString(proof)
@@ -186,14 +185,19 @@ func doC2Req(c *gin.Context) {
 				log.Errorf("verify miner_id: %s, sector_id: %d, c2 proof failed, error: %v", svi.Miner.String(), c2in.SectorNum, err)
 				return
 			}
-			if !ok {
-				log.Warnf("miner_id: %s, sector_id: %d, proof was invalid", svi.Miner.String(), svi.SectorID.Number)
-			}
 			c2proof.Verify = ok
-			log.Infof("miner_id: %s, sector_id: %d, proof was valid", svi.Miner.String(), svi.SectorID.Number)
+			log.Infof("miner_id: %s, sector_id: %d, ", svi.Miner.String(), svi.SectorID.Number)
 		}
+
+		if c2proof.Verify {
+			log.Infof("seal: commit phase 2 finished, total time: %f, miner_id: %s, sector_id: %d, proof was valid", totalTime.Seconds(), c2in.Sid.ID.Miner.String(), c2in.SectorNum)
+		} else {
+			log.Infof("seal: commit phase 2 finished, total time: %f, miner_id: %s, sector_id: %d", totalTime.Seconds(), c2in.Sid.ID.Miner.String(), c2in.SectorNum)
+		}
+
+		result, _ := json.Marshal(&c2proof)
 		c2JsonFile := filepath.Join(tmpDir, fmt.Sprintf("c2-%d-%d.json", c2in.Sid.ID.Miner, c2in.Sid.ID.Number))
-		if err = os.WriteFile(c2JsonFile, []byte(base64.StdEncoding.EncodeToString(proof)), 0666); err != nil {
+		if err = os.WriteFile(c2JsonFile, result, 0666); err != nil {
 			log.Errorf("save miner_id: %s, sector_id: %s, proof file failed, error: %v", c2in.Sid.ID.Miner, c2in.Sid.ID.Number, err)
 			return
 		}
