@@ -65,9 +65,9 @@ func main() {
 	router.GET("/ubi/:miner_id/:sector_id", getC2Proof)
 	router.POST("/ubi", doC2Req)
 
-	token, ok := os.LookupEnv("access_token")
+	token, ok := os.LookupEnv("USER_ACCESS_TOKEN")
 	if !ok {
-		log.Fatalf("must be set access_token env")
+		log.Fatalf("must be set USER_ACCESS_TOKEN env")
 	}
 	accessToken = token
 
