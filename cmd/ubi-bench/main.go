@@ -61,10 +61,11 @@ func main() {
 		ValidateHeaders: false,
 	}))
 
-	r.Handle("GET ", "/", func(c *gin.Context) {
+	r.GET("/", func(c *gin.Context) {
 		createDataResponse(SuccessCode, nil)
 		return
 	})
+
 	router := r.Group("/api")
 	router.GET("/ubi/:miner_id/:sector_id", getC2Proof)
 	router.POST("/ubi", doC2Req)
