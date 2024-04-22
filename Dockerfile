@@ -59,4 +59,4 @@ RUN mkdir /var/tmp/filecoin-proof-parameters
 
 VOLUME /var/tmp/filecoin-proof-parameters
 
-CMD ["./ubi-benchmark"]
+CMD ["ubi-benchmark"]
