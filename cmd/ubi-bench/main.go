@@ -62,7 +62,7 @@ func main() {
 	}))
 
 	r.GET("/", func(c *gin.Context) {
-		createDataResponse(SuccessCode, nil)
+		c.JSON(http.StatusOK, createDataResponse(SuccessCode, nil))
 		return
 	})
 
