@@ -2,7 +2,7 @@
 FROM sxk1633/lotus-compile-cuda:11.4 AS ubi-builder
 ENV XDG_CACHE_HOME="/tmp"
 
-RUN wget -O go.tar.gz https://golang.org/dl/go1.17.7.linux-amd64.tar.gz && \
+RUN wget -O go.tar.gz https://golang.org/dl/go1.21.7.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go.tar.gz && \
     rm go.tar.gz
 
