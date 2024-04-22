@@ -50,7 +50,6 @@ FROM ubuntu:20.04 AS ubi-benchmark
 COPY --from=ubi-builder /opt/ubi-benchmark/ubi-bench /usr/local/bin/
 ENV TRUST_PARAMS=1
 ENV RUST_LOG=Info
-ENV USER_ACCESS_TOKEN=admin123
 ENV FILECOIN_PARAMETER_CACHE /var/tmp/filecoin-proof-parameters
 ENV DEBIAN_FRONTEND=noninteractive
 

@@ -52,7 +52,7 @@ func main() {
 
 	log.Info("Starting ubi-bench")
 	r := gin.Default()
-	r.Use(AuthMiddleware(), cors.Middleware(cors.Config{
+	r.Use(cors.Middleware(cors.Config{
 		Origins:         "*",
 		Methods:         "GET, PUT, POST, DELETE",
 		RequestHeaders:  "Origin, Authorization, Content-Type",
@@ -61,15 +61,13 @@ func main() {
 		ValidateHeaders: false,
 	}))
 
+	r.Handle("GET ", "/", func(c *gin.Context) {
+		createDataResponse(SuccessCode, nil)
+		return
+	})
 	router := r.Group("/api")
 	router.GET("/ubi/:miner_id/:sector_id", getC2Proof)
 	router.POST("/ubi", doC2Req)
-
-	token, ok := os.LookupEnv("USER_ACCESS_TOKEN")
-	if !ok {
-		log.Fatalf("must be set USER_ACCESS_TOKEN env")
-	}
-	accessToken = token
 
 	var err error
 	tmpDir, err = os.MkdirTemp("", UbiProofDir)
@@ -90,11 +88,13 @@ func main() {
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.GetHeader("access_token")
-		if token != accessToken {
-			c.JSON(http.StatusUnauthorized, createResponse(AuthFailedCode, ""))
-			c.Abort()
-			return
+		if strings.HasPrefix(c.Request.RequestURI, "/api") {
+			token := c.GetHeader("access_token")
+			if token != accessToken {
+				c.JSON(http.StatusUnauthorized, createResponse(AuthFailedCode, ""))
+				c.Abort()
+				return
+			}
 		}
 		c.Next()
 	}
