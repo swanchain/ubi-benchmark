@@ -2,8 +2,11 @@
 FROM sxk1633/lotus-compile-cuda:11.4 AS ubi-builder
 ENV XDG_CACHE_HOME="/tmp"
 
-RUN wget -c https://golang.org/dl/go1.21.7.linux-amd64.tar.gz -O - | tar -xz -C /usr/local && \
-    echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc && source ~/.bashrc
+RUN wget -O go.tar.gz https://golang.org/dl/go1.17.7.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go.tar.gz && \
+    rm go.tar.gz
+
+ENV PATH=$PATH:/usr/local/go/bin
 
 ### taken from https://github.com/rust-lang/docker-rust/blob/master/1.63.0/buster/Dockerfile
 ENV RUSTUP_HOME=/usr/local/rustup \
