@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ import (
 var log = logging.Logger("ubi-bench")
 
 var tmpDir string
-var accessToken string
+var doSectorMap = make(map[uint64]struct{})
 
 const UbiProofDir = "zk-proof"
 
@@ -87,20 +88,6 @@ func main() {
 	}
 }
 
-func AuthMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if strings.HasPrefix(c.Request.RequestURI, "/api") {
-			token := c.GetHeader("access_token")
-			if token != accessToken {
-				c.JSON(http.StatusUnauthorized, createResponse(AuthFailedCode, ""))
-				c.Abort()
-				return
-			}
-		}
-		c.Next()
-	}
-}
-
 func doC2Req(c *gin.Context) {
 	var c2in Commit2In
 	if err := c.ShouldBindJSON(&c2in); err != nil {
@@ -113,11 +100,15 @@ func doC2Req(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, createResponse(ServerError, ""))
 		return
 	}
+
+	doSectorMap[uint64(c2in.Sid.ID.Number)] = struct{}{}
+
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("catch painc error: %v", err)
 			}
+			delete(doSectorMap, uint64(c2in.Sid.ID.Number))
 		}()
 
 		sb, err := ffiwrapper.New(nil)
@@ -187,6 +178,17 @@ func getC2Proof(c *gin.Context) {
 		return
 	}
 
+	parseUint, err := strconv.ParseUint(sectorId, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusOK, createResponse(ParseParamError, ""))
+		return
+	}
+
+	if _, ok := doSectorMap[parseUint]; ok {
+		c.JSON(http.StatusOK, createDataResponse(SuccessCode, "This sector is running C2"))
+		return
+	}
+
 	c2File := filepath.Join(tmpDir, fmt.Sprintf("c2-%s-%s.json", minerId, sectorId))
 
 	if _, err := os.Stat(c2File); err != nil {
@@ -238,21 +240,23 @@ func createDataResponse(code int, data interface{}) Response {
 }
 
 const (
-	SuccessCode    = 200
-	AuthFailedCode = 401
-	JsonError      = 400
-	ServerError    = 500
-	BadParamError  = 5001
+	SuccessCode     = 200
+	AuthFailedCode  = 401
+	JsonError       = 400
+	ServerError     = 500
+	BadParamError   = 5001
+	ParseParamError = 5002
 
 	SubmitProof = 2000
 	ProofError  = 7003
 )
 
 var codeMsg = map[int]string{
-	BadParamError:  "The request parameter is not valid",
-	JsonError:      "An error occurred while converting to json",
-	ServerError:    "server failed",
-	SubmitProof:    "The proof task has been submitted",
-	ProofError:     "An error occurred while executing the calculation task",
-	AuthFailedCode: "the request header missing access_token or access_token is incorrect",
+	BadParamError:   "The request parameter is not valid",
+	ParseParamError: "Parse param type failed",
+	JsonError:       "An error occurred while converting to json",
+	ServerError:     "server failed",
+	SubmitProof:     "The proof task has been submitted",
+	ProofError:      "An error occurred while executing the calculation task",
+	AuthFailedCode:  "The request header missing access_token or access_token is incorrect",
 }
