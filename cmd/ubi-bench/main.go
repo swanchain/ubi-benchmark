@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/filecoin-project/go-paramfetch"
@@ -28,7 +29,7 @@ import (
 var log = logging.Logger("ubi-bench")
 
 var tmpDir string
-var doSectorMap = make(map[uint64]struct{})
+var doSectorMap sync.Map
 
 const UbiProofDir = "zk-proof"
 
@@ -101,14 +102,15 @@ func doC2Req(c *gin.Context) {
 		return
 	}
 
-	doSectorMap[uint64(c2in.Sid.ID.Number)] = struct{}{}
+	doSectorMap.Store(uint64(c2in.Sid.ID.Number), struct{}{})
 
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Errorf("catch painc error: %v", err)
 			}
-			delete(doSectorMap, uint64(c2in.Sid.ID.Number))
+
+			doSectorMap.Delete(uint64(c2in.Sid.ID.Number))
 		}()
 
 		sb, err := ffiwrapper.New(nil)
@@ -184,7 +186,7 @@ func getC2Proof(c *gin.Context) {
 		return
 	}
 
-	if _, ok := doSectorMap[parseUint]; ok {
+	if _, ok := doSectorMap.Load(parseUint); ok {
 		c.JSON(http.StatusOK, createDataResponse(SuccessCode, "This sector is running C2"))
 		return
 	}
