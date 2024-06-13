@@ -15,12 +15,12 @@ const (
 )
 
 type Task struct {
-	Name        string `json:"name"`
-	Type        int    `json:"type"`
-	ZkType      string `json:"zk_type"` // fil-c2-512M
-	InputParam  string `json:"input_param"`
-	VerifyParam string `json:"verify_param"`
-	ResourceID  int    `json:"resource_id"`
+	Name         string `json:"name"`
+	Type         int    `json:"type"` // 1:Fil-C2-512M, 2:Aleo, 3:AI, 4:Fil-C2-32G
+	InputParam   string `json:"input_param"`
+	VerifyParam  string `json:"verify_param"`
+	ResourceID   int    `json:"resource_id"`
+	ResourceType int    `json:"resource_type"` // 0: cpu 1: gpu
 }
 
 func DoSend(task Task) {

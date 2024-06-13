@@ -707,13 +707,11 @@ var uploadC1Cmd = &cli.Command{
 		}
 
 		numType := c.String("type")
-		var dirName, zkType string
+		var dirName string
 		if numType == "512" {
 			dirName = "fil-c2/512M"
-			zkType = "fil-c2-512M"
 		} else if numType == "32" {
 			dirName = "fil-c2/32G"
-			zkType = "fil-c2-32G"
 		}
 
 		var count int
@@ -760,7 +758,6 @@ var uploadC1Cmd = &cli.Command{
 					task = Task{
 						Name:        d.Name(),
 						Type:        0,
-						ZkType:      zkType,
 						InputParam:  inputParam,
 						VerifyParam: verifyParam,
 						ResourceID:  resourceId,
@@ -776,7 +773,6 @@ var uploadC1Cmd = &cli.Command{
 					task = Task{
 						Name:        d.Name(),
 						Type:        1,
-						ZkType:      zkType,
 						InputParam:  inputParam,
 						VerifyParam: verifyParam,
 						ResourceID:  resourceId,
@@ -969,19 +965,21 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 	}
 
 	var dirName, zkType string
-	var taskType int
+	var taskType int     //  1:Fil-C2-512M, 2:Aleo, 3:AI, 4:Fil-C2-32G
+	var resourceType int // 0: cpu 1: gpu
 	var needTask ResourceCount
 	if sectorType == 512 {
+		taskType = 1
 		sort.Sort(rc512)
 		if len(rc512) > 0 {
 			needTask = rc512[0]
-			if needTask.Count < 2000 {
+			if needTask.Count < 20000 {
 				dirName = "fil-c2/512M"
 				zkType = "fil-c2-512M"
 				if needTask.ResourceId == CPU512 {
-					taskType = 0
+					resourceType = 0
 				} else {
-					taskType = 1
+					resourceType = 1
 				}
 			} else {
 				return
@@ -990,16 +988,17 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 			return
 		}
 	} else {
+		taskType = 4
 		sort.Sort(rc32)
 		if len(rc32) > 0 {
 			needTask = rc32[0]
-			if needTask.Count < 2000 {
+			if needTask.Count < 20000 {
 				dirName = "fil-c2/32G"
 				zkType = "fil-c2-32G"
 				if needTask.ResourceId == CPU32G {
-					taskType = 0
+					resourceType = 0
 				} else {
-					taskType = 1
+					resourceType = 1
 				}
 			} else {
 				return
@@ -1048,13 +1047,17 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 			return nil
 		})
 
+		if strings.HasSuffix(inputParam, "ipfs/") || strings.HasSuffix(verifyParam, "ipfs/") {
+			continue
+		}
+
 		var task = Task{
-			Name:        taskDir,
-			Type:        taskType,
-			ZkType:      zkType,
-			InputParam:  inputParam,
-			VerifyParam: verifyParam,
-			ResourceID:  needTask.ResourceId,
+			Name:         taskDir,
+			Type:         taskType,
+			InputParam:   inputParam,
+			VerifyParam:  verifyParam,
+			ResourceID:   needTask.ResourceId,
+			ResourceType: resourceType,
 		}
 		DoSend(task)
 		fmt.Println("==============")
