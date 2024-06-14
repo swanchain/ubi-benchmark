@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1052,14 +1053,17 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 		}
 
 		var task = Task{
-			Name:         taskDir,
 			Type:         taskType,
 			InputParam:   inputParam,
 			VerifyParam:  verifyParam,
 			ResourceID:   needTask.ResourceId,
 			ResourceType: resourceType,
 		}
-		DoSend(task)
+		for i := 0; i < 20; i++ {
+			task.Name = taskDir + strconv.Itoa(i)
+			DoSend(task)
+		}
+
 		fmt.Println("==============")
 
 		latestHeight++
