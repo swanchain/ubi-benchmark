@@ -540,29 +540,19 @@ var c2Cmd = &cli.Command{
 	},
 	Action: func(c *cli.Context) error {
 
-		paramTransport := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		paramClient := &http.Client{
-			Transport: paramTransport,
-			Timeout:   20 * time.Second,
-		}
-
 		paramUrl := os.Getenv("PARAM_URL")
-		log.Infof("get param from mcs url: %s", paramUrl)
-		paramResp, err := paramClient.Get(paramUrl)
-		if err != nil {
-			return fmt.Errorf("error making request to mcs url: %+v", err)
-		}
-		defer paramResp.Body.Close()
-		if paramResp.StatusCode != http.StatusOK {
-			return fmt.Errorf("mcs response not OK. Status Code: %d", paramResp.StatusCode)
-		}
+		log.Infof("task_id: %s, get param from mcs url: %s", os.Getenv("TASKID"), paramUrl)
 
-		outBytes, err := io.ReadAll(paramResp.Body)
-		if err != nil {
-			fmt.Println("read body failed, error:", err)
-			return err
+		var outBytes []byte
+		var err error
+		for i := 0; i < 10; i++ {
+			outBytes, err = getDataByUrl(paramUrl)
+			if err != nil {
+				fmt.Printf("failed to get task params, error: %s, retrying \n", err.Error())
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+			break
 		}
 
 		paramsIn, err := gozstd.Decompress(nil, outBytes)
@@ -693,4 +683,29 @@ func spt(ssize abi.SectorSize, synth bool) abi.RegisteredSealProof {
 	}
 
 	return spt
+}
+
+func getDataByUrl(paramUrl string) ([]byte, error) {
+	paramTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	paramClient := &http.Client{
+		Transport: paramTransport,
+		Timeout:   20 * time.Second,
+	}
+
+	paramResp, err := paramClient.Get(paramUrl)
+	if err != nil {
+		return nil, fmt.Errorf("error making request to mcs url: %+v", err)
+	}
+	defer paramResp.Body.Close()
+	if paramResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("mcs response not OK. Status Code: %d", paramResp.StatusCode)
+	}
+
+	outBytes, err := io.ReadAll(paramResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body failed, error: %v", err)
+	}
+	return outBytes, nil
 }
