@@ -1323,7 +1323,7 @@ func bps(sectorSize abi.SectorSize, sectorNum int, d time.Duration) string {
 }
 
 func spt(ssize abi.SectorSize, synth bool) abi.RegisteredSealProof {
-	spt, err := miner.SealProofTypeFromSectorSize(ssize, build.TestNetworkVersion, synth)
+	spt, err := miner.SealProofTypeFromSectorSize(ssize, build.TestNetworkVersion, miner.SealProofVariant_Standard)
 	if err != nil {
 		panic(err)
 	}
