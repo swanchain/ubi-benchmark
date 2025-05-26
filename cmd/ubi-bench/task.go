@@ -21,6 +21,7 @@ type Task struct {
 	VerifyParam  string `json:"verify_param"`
 	ResourceID   int    `json:"resource_id"`
 	ResourceType int    `json:"resource_type"` // 0: cpu 1: gpu
+	Source       int    `json:"source"`
 }
 
 func DoSend(task Task) {

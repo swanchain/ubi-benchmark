@@ -21,10 +21,14 @@ type MCS struct {
 }
 
 type HUB struct {
-	HubUrl        string `toml:"HUB_URL"`
-	TaskUrl       string `toml:"TASK_URL"`
-	CheckInterval int64  `toml:"CHECK_INTERVAL"`
-	BatchNum      int    `toml:"BATCH_NUM"`
+	HubUrl           string `toml:"HUB_URL"`
+	TaskUrl          string `toml:"TASK_URL"`
+	CheckInterval    int64  `toml:"CHECK_INTERVAL"`
+	BatchNum         int    `toml:"BATCH_NUM"`
+	ENABLE_TITAN     int    `toml:"ENABLE_TITAN"`
+	TITAN_KEY        string `toml:"TITAN_KEY"`
+	TITAN_FOLDER_512 int    `toml:"TITAN_FOLDER_512"`
+	TITAN_FOLDER_32  int    `toml:"TITAN_FOLDER_32"`
 }
 
 func InitConfig() error {

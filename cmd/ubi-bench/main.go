@@ -868,7 +868,10 @@ var daemonCmd = &cli.Command{
 		for {
 			select {
 			case <-ticker.C:
-				checkTaskCount(maddr, sb, sdir, c1in, latestHeight, sectorType)
+				checkTaskCountByMcs(maddr, sb, sdir, c1in, latestHeight, sectorType)
+				if utils.GetConfig().HUB.ENABLE_TITAN == 1 {
+					checkTaskCountByTiTan(maddr, sb, sdir, c1in, latestHeight+1, sectorType)
+				}
 			}
 		}
 	},
@@ -933,7 +936,7 @@ var verifyCmd = &cli.Command{
 	},
 }
 
-func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height, sectorType int64) {
+func checkTaskCountByMcs(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height, sectorType int64) {
 	response, err := http.Get(utils.GetConfig().HUB.TaskUrl)
 	if err != nil {
 		log.Errorf("Error making GET request: %v", err)
@@ -974,7 +977,7 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 		sort.Sort(rc512)
 		if len(rc512) > 0 {
 			needTask = rc512[0]
-			if needTask.Count < 20000 {
+			if needTask.Count < 40000 {
 				dirName = "fil-c2/512M"
 				zkType = "fil-c2-512M"
 				if needTask.ResourceId == CPU512 {
@@ -993,7 +996,7 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 		sort.Sort(rc32)
 		if len(rc32) > 0 {
 			needTask = rc32[0]
-			if needTask.Count < 20000 {
+			if needTask.Count < 40000 {
 				dirName = "fil-c2/32G"
 				zkType = "fil-c2-32G"
 				if needTask.ResourceId == CPU32G {
@@ -1024,18 +1027,8 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 			if f.IsDir() {
 				return nil
 			}
-			mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join(dirName, taskDir, f.Name()), path, true)
-			if err != nil {
-				log.Errorf("Failed upload file to bucket, error: %v", err)
-				return err
-			}
-			gatewayUrl, err := storageService.GetGatewayUrl()
-			if err != nil {
-				log.Errorf("Failed get mcs ipfs gatewayUrl, error: %v", err)
-				return err
-			}
 
-			fileUrl := *gatewayUrl + "/ipfs/" + mcsOssFile.PayloadCid
+			fileUrl := uploadFile(storageService, dirName, taskDir, f.Name(), path)
 			fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
 			if strings.Contains(f.Name(), "verify") {
 				verifyParam = fileUrl
@@ -1058,6 +1051,7 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 			VerifyParam:  verifyParam,
 			ResourceID:   needTask.ResourceId,
 			ResourceType: resourceType,
+			Source:       0,
 		}
 		for i := 0; i < 20; i++ {
 			task.Name = taskDir + strconv.Itoa(i)
@@ -1074,6 +1068,194 @@ func checkTaskCount(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir strin
 		os.RemoveAll(rootDir)
 	}
 
+}
+
+func checkTaskCountByTiTan(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height, sectorType int64) {
+	response, err := http.Get(utils.GetConfig().HUB.TaskUrl + "&source=1")
+	if err != nil {
+		log.Errorf("Error making GET request: %v", err)
+		return
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		log.Errorf("Error reading response body: %v", err)
+		return
+	}
+
+	var taskStats TaskStats
+	err = json.Unmarshal(body, &taskStats)
+	if err != nil {
+		log.Errorf("Error response convet to json: %v", err)
+		return
+	}
+
+	log.Infof("current task stats: %+v", taskStats.Data)
+	var rc512, rc32 ResourceCountList
+	for _, t := range taskStats.Data {
+		if sectorType == 512 && (t.ResourceId == CPU512 || t.ResourceId == GPU512) {
+			rc512 = append(rc512, t)
+		}
+		if sectorType == 32 && (t.ResourceId == CPU32G || t.ResourceId == GPU32G) {
+			rc32 = append(rc32, t)
+		}
+	}
+
+	var dirName, zkType string
+	var taskType int     //  1:Fil-C2-512M, 2:Aleo, 3:AI, 4:Fil-C2-32G
+	var resourceType int // 0: cpu 1: gpu
+	var needTask ResourceCount
+	if sectorType == 512 {
+		taskType = 1
+		sort.Sort(rc512)
+		if len(rc512) > 0 {
+			needTask = rc512[0]
+			if needTask.Count < 10000 {
+				dirName = "fil-c2/512M"
+				zkType = "fil-c2-512M"
+				if needTask.ResourceId == CPU512 {
+					resourceType = 0
+				} else {
+					resourceType = 1
+				}
+			} else {
+				return
+			}
+		} else {
+			return
+		}
+	} else {
+		taskType = 4
+		sort.Sort(rc32)
+		if len(rc32) > 0 {
+			needTask = rc32[0]
+			if needTask.Count < 10000 {
+				dirName = "fil-c2/32G"
+				zkType = "fil-c2-32G"
+				if needTask.ResourceId == CPU32G {
+					resourceType = 0
+				} else {
+					resourceType = 1
+				}
+			} else {
+				return
+			}
+		} else {
+			return
+		}
+	}
+
+	for i := 0; i < utils.GetConfig().HUB.BatchNum; i++ {
+		rootDir, taskDir, err := generaC1Out(mAddr, sealer, sdir, c1in, height+int64(i))
+		if err != nil {
+			log.Errorf("Error response convet to json: %v", err)
+			return
+		}
+
+		storageService, err := utils.NewTiTanClient(utils.GetConfig().HUB.TITAN_KEY)
+		if err != nil {
+			log.Errorf("Error create titan client: %v", err)
+			return
+		}
+
+		rootFolderId := utils.GetConfig().HUB.TITAN_FOLDER_512
+		if dirName == "fil-c2/32G" {
+			rootFolderId = utils.GetConfig().HUB.TITAN_FOLDER_32
+		}
+
+		folderId, err := storageService.CreateFolder(rootFolderId, taskDir)
+		if err != nil {
+			log.Errorf("Error create titan folder: %v", err)
+			return
+		}
+
+		var inputParam, verifyParam string
+		err = filepath.Walk(rootDir, func(path string, f fs.FileInfo, err error) error {
+			if f.IsDir() {
+				return nil
+			}
+
+			fileUrl := uploadFileToTiTan(storageService, folderId, path)
+			fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
+			if strings.Contains(f.Name(), "verify") {
+				verifyParam = fileUrl
+			} else {
+				inputParam = fileUrl
+			}
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+
+		if strings.HasSuffix(inputParam, "ipfs/") || strings.HasSuffix(verifyParam, "ipfs/") {
+			continue
+		}
+
+		var task = Task{
+			Type:         taskType,
+			InputParam:   inputParam,
+			VerifyParam:  verifyParam,
+			ResourceID:   needTask.ResourceId,
+			ResourceType: resourceType,
+			Source:       1,
+		}
+		for i := 0; i < 20; i++ {
+			task.Name = taskDir + strconv.Itoa(i)
+			DoSend(task)
+		}
+
+		fmt.Println("==============")
+
+		latestHeight++
+		if err != nil {
+			log.Errorf("upload file to mcs failed, task: %s, zkType: %s", taskDir, zkType)
+			continue
+		}
+		os.RemoveAll(rootDir)
+	}
+
+}
+
+func uploadFile(storageService *utils.StorageService, dirName, taskDir, name, path string) string {
+	var result string
+
+	for i := 0; i < 3; i++ {
+		mcsOssFile, err := storageService.UploadFileToBucket(filepath.Join(dirName, taskDir, name), path, true)
+		if err != nil {
+			log.Errorf("Failed upload file to bucket, error: %v", err)
+			continue
+		}
+		gatewayUrl, err := storageService.GetGatewayUrl()
+		if err != nil {
+			log.Errorf("Failed get mcs ipfs gatewayUrl, error: %v", err)
+			continue
+		}
+
+		if mcsOssFile == nil || mcsOssFile.PayloadCid == "" {
+			continue
+		}
+
+		result = *gatewayUrl + "/ipfs/" + mcsOssFile.PayloadCid
+		break
+	}
+	return result
+}
+
+func uploadFileToTiTan(storageService *utils.TiTanClient, folderId int, path string) string {
+	var result string
+
+	for i := 0; i < 3; i++ {
+		url, err := storageService.UploadFile(path, folderId)
+		if err != nil {
+			log.Errorf("Failed upload file to ti-tan, error: %v", err)
+			continue
+		}
+		result = url
+		break
+	}
+	return result
 }
 
 func generaC1Out(mAddr address.Address, sealer *ffiwrapper.Sealer, sdir string, c1in Commit1In, height int64) (string, string, error) {

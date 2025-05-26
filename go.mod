@@ -14,7 +14,7 @@ require (
 	github.com/filecoin-project/go-paramfetch v0.0.4
 	github.com/filecoin-project/go-state-types v0.12.8
 	github.com/filecoin-project/lotus v1.25.1
-	github.com/filswan/go-mcs-sdk v0.0.4
+	github.com/filswan/go-mcs-sdk v0.0.5
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/urfave/cli/v2 v2.25.5
@@ -233,4 +233,4 @@ require (
 
 replace github.com/filecoin-project/filecoin-ffi => ./extern/filecoin-ffi
 
-replace github.com/filswan/go-mcs-sdk => ./extern/go-mcs-sdk
+// replace github.com/filswan/go-mcs-sdk => ./extern/go-mcs-sdk
