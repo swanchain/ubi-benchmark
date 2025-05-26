@@ -3,7 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
-	storage "github.com/utopiosphe/titan-storage-sdk"
+	titan_storage "github.com/utopiosphe/titan-storage-sdk"
 	"strings"
 )
 
@@ -12,14 +12,14 @@ const (
 )
 
 type TiTanClient struct {
-	titanStorage storage.Storage
+	titanStorage titan_storage.Storage
 }
 
 func NewTiTanClient(apiKey string) (*TiTanClient, error) {
 	client := &TiTanClient{}
 
 	var err error
-	client.titanStorage, err = storage.Initialize(&storage.Config{
+	client.titanStorage, err = titan_storage.Initialize(&titan_storage.Config{
 		TitanURL: titanStorageURL,
 		APIKey:   apiKey,
 	})
@@ -37,7 +37,7 @@ func (client *TiTanClient) UploadFile(filePath string, folderId int) (string, er
 		}
 	}
 
-	root, err := client.titanStorage.UploadFilesWithPath(context.Background(), filePath, progress, false, storage.WithGroupID(folderId))
+	root, err := client.titanStorage.UploadFilesWithPath(context.Background(), filePath, progress, false, titan_storage.WithGroupID(folderId))
 	if err != nil {
 		fmt.Println("UploadFile error ", err.Error())
 		return "", err
