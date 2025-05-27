@@ -1164,19 +1164,13 @@ func checkTaskCountByTiTan(mAddr address.Address, sealer *ffiwrapper.Sealer, sdi
 			rootFolderId = utils.GetConfig().HUB.TITAN_FOLDER_32
 		}
 
-		folderId, err := storageService.CreateFolder(rootFolderId, taskDir)
-		if err != nil {
-			log.Errorf("Error create titan folder: %v", err)
-			return
-		}
-
 		var inputParam, verifyParam string
 		err = filepath.Walk(rootDir, func(path string, f fs.FileInfo, err error) error {
 			if f.IsDir() {
 				return nil
 			}
 
-			fileUrl := uploadFileToTiTan(storageService, folderId, path)
+			fileUrl := uploadFileToTiTan(storageService, rootFolderId, path)
 			fmt.Printf("file name: %s, url: %s \n", f.Name(), fileUrl)
 			if strings.Contains(f.Name(), "verify") {
 				verifyParam = fileUrl
