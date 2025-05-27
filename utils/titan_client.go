@@ -49,7 +49,8 @@ func (client *TiTanClient) UploadFile(filePath string, folderId int) (string, er
 	for _, l := range assetResult.URLs {
 		fmt.Println("UploadFile url: ", l)
 		if strings.HasPrefix(l, "https://"+root.String()) {
-			url = l[:strings.LastIndex(l, "?")]
+			filenameIndex := strings.Index(l, "filename")
+			url = l[:strings.LastIndex(l, "?")] + "?" + l[filenameIndex:]
 			break
 		}
 	}
