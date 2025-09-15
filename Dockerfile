@@ -1,5 +1,42 @@
 #####################################
-FROM sxk1633/lotus-compile-cuda:11.4 AS ubi-builder
+FROM nvidia/cuda:11.4.3-devel-ubuntu20.04 AS ubi-builder
+
+# Prevent interactive prompts from apt
+ENV DEBIAN_FRONTEND=noninteractive
+ 
+# Set environment variables for Go version and architecture
+# This makes it easy to update Go later
+ENV GO_VERSION="1.22.12"
+ENV GO_OS="linux"
+ENV GO_ARCH="amd64"
+# SHA256 checksum for go1.22.0.linux-amd64.tar.gz - ALWAYS verify this from golang.org/dl
+# You can find the correct checksum on the official Go downloads page:
+# https://golang.org/dl/
+ENV GO_SUM="4fa4f869b0f7fc6bb1eb2660e74657fbf04cdd290b5aef905585c86051b34d43"
+ 
+# Install necessary packages for downloading and extracting Go, and common build tools
+# --no-install-recommends helps keep the image size down
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl wget git jq pkg-config hwloc libhwloc-dev coreutils vim && \
+    rm -rf /var/lib/apt/lists/*
+ 
+# Download, verify, and install Go
+# -fsSL: Fail silently, show errors, follow redirects
+# The checksum verification is crucial for security and integrity.
+RUN curl -fsSL "https://golang.org/dl/go${GO_VERSION}.${GO_OS}-${GO_ARCH}.tar.gz" -o go.tar.gz && \
+    echo "${GO_SUM} go.tar.gz" | sha256sum -c - && \
+    tar -C /usr/local -xzf go.tar.gz && \
+    rm go.tar.gz
+ 
+# Set Go environment variables
+ENV GOROOT=/usr/local/go
+# Add GOROOT/bin and GOPATH/bin to the system PATH
+ENV PATH=$PATH:$GOROOT/bin
+ENV GOPATH=/go
+ 
+# Create GOPATH directory
+RUN mkdir -p ${GOPATH}
+
 ENV XDG_CACHE_HOME="/tmp"
 
 ### taken from https://github.com/rust-lang/docker-rust/blob/master/1.63.0/buster/Dockerfile
@@ -29,6 +66,11 @@ RUN set -eux; \
 COPY ./ /opt/ubi-benchmark
 WORKDIR /opt/ubi-benchmark
 
+RUN mkdir -p /usr/lib/x86_64-linux-gnu/
+# NOTE: copy your host /usr/lib/x86_64-linux-gnu/libcuda.so* to the libcuda_files folder first
+COPY libcuda_files/* /usr/lib/x86_64-linux-gnu/
+
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=1
@@ -41,16 +83,20 @@ RUN make clean build
 #####################################
 FROM ubuntu:20.04 AS ubi-benchmark
 
+ENV DEBIAN_FRONTEND=noninteractive
+RUN ln -fs /usr/share/zoneinfo/America/Toronto /etc/localtime \
+    && apt-get update \
+    && apt-get install -y tzdata \
+    && dpkg-reconfigure -f noninteractive tzdata
+
 COPY --from=ubi-builder /opt/ubi-benchmark/ubi-bench /usr/local/bin/
 ENV TRUST_PARAMS=1
 ENV RUST_LOG=Info
-ENV UBI_TASK_IN_PARAM_PATH /var/tmp/fil-c2-param
-ENV FILECOIN_PARAMETER_CACHE /var/tmp/filecoin-proof-parameters
+ENV UBI_TASK_IN_PARAM_PATH=/var/tmp/fil-c2-param
+ENV FILECOIN_PARAMETER_CACHE=/var/tmp/filecoin-proof-parameters
 
 RUN apt-get update && apt-get install -y hwloc libhwloc-dev coreutils vim
 RUN mkdir /var/tmp/filecoin-proof-parameters
-RUN chown fc: /var/tmp/filecoin-proof-parameters
-
 VOLUME /var/tmp/filecoin-proof-parameters
 
 CMD ["/bin/bash", "-c", "sleep infinity"]
