@@ -75,7 +75,7 @@ ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/cuda/lib64:${LD_LIBRARY
 ### make configurable filecoin-ffi build
 ARG FFI_BUILD_FROM_SOURCE=1
 ENV FFI_BUILD_FROM_SOURCE=${FFI_BUILD_FROM_SOURCE}
-ENV RUSTFLAGS="-C target-cpu=native -g"
+ENV RUSTFLAGS="-C target-cpu=x86_64-v3 -g"
 ENV FFI_USE_CUDA=1
 
 RUN make clean build
